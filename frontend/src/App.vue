@@ -3,7 +3,8 @@ import { h, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NMessageProvider, NDialogProvider, NConfigProvider, NLayout, NLayoutSider, NLayoutContent, NMenu, NIcon, NButton } from 'naive-ui'
 import { zhCN, dateZhCN, darkTheme } from 'naive-ui'
-import { Home, Users, ClipboardList, Swords, UserRoundSearch, ScrollText, Bug, Moon, Sun, BookOpen, MessageSquare, BarChart3 } from 'lucide-vue-next'
+import { Home, Users, ClipboardList, Swords, UserRoundSearch, ScrollText, Bug, Moon, Sun, BookOpen, MessageSquare, BarChart3, FileText, Activity, Trophy, Shield, Crosshair } from 'lucide-vue-next'
+
 import { useThemeStore } from './stores/theme'
 
 import TitleBar from './components/TitleBar.vue'
@@ -41,6 +42,11 @@ const menuOptions = [
         icon: renderIcon(ClipboardList)
     },
     {
+        label: '同盟战报',
+        key: 'battleReports',
+        icon: renderIcon(FileText)
+    },
+    {
         label: '分组武勋',
         key: 'groupWu',
         icon: renderIcon(Swords)
@@ -60,11 +66,31 @@ const menuOptions = [
         key: 'book',
         icon: renderIcon(BookOpen)
     },
-    // {
-    //     label: '战役叫阵',
-    //     key: 'battlecall',
-    //     icon: renderIcon(MessageSquare)
-    // },
+    {
+        label: '战役叫阵',
+        key: 'battlecall',
+        icon: renderIcon(MessageSquare)
+    },
+    {
+        label: '赛季看板',
+        key: 'dashboard',
+        icon: renderIcon(Trophy)
+    },
+    {
+        label: '活跃度分析',
+        key: 'activity',
+        icon: renderIcon(Activity)
+    },
+    {
+        label: '热门排行',
+        key: 'hotrank',
+        icon: renderIcon(Shield)
+    },
+    {
+        label: '队伍克制',
+        key: 'teamcounter',
+        icon: renderIcon(Crosshair)
+    },
     {
         label: '运行日志',
         key: 'logs',

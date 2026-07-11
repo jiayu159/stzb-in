@@ -13,23 +13,45 @@ export function DeleteTask(arg1:number):Promise<string>;
 
 export function DeleteTaskReport(arg1:number):Promise<string>;
 
+export function DisableAutoListen():Promise<string>;
+
+export function DisableBattleCall():Promise<string>;
+
 export function DisableBookData():Promise<string>;
+
+export function DisableEnemyMonitor():Promise<string>;
 
 export function DisableGetBattleReport():Promise<string>;
 
 export function DisableGetReport():Promise<string>;
 
+export function EnableAutoListen():Promise<string>;
+
+export function EnableBattleCall():Promise<string>;
+
 export function EnableBookData():Promise<string>;
+
+export function EnableEnemyMonitor():Promise<string>;
 
 export function EnableGetBattleReport():Promise<string>;
 
-export function EnableGetReport(arg1:number):Promise<string>;
+export function EnableGetReport(arg1:number,arg2:number):Promise<string>;
+
+export function ExportTaskReport(arg1:number):Promise<string>;
+
+export function GetBattleReports(arg1:string,arg2:number,arg3:number,arg4:number):Promise<string>;
+
+export function GetDashboardStats():Promise<string>;
 
 export function GetDbList():Promise<string>;
 
 export function GetGroupWu():Promise<string>;
 
+export function GetHotRank():Promise<string>;
+
 export function GetLogs():Promise<string>;
+
+export function GetMemberActivity():Promise<string>;
 
 export function GetPlayerTeam(arg1:string,arg2:string,arg3:string,arg4:number,arg5:number):Promise<string>;
 
@@ -38,6 +60,8 @@ export function GetReportNumByTaskId(arg1:number):Promise<string>;
 export function GetTask(arg1:number):Promise<string>;
 
 export function GetTaskList():Promise<string>;
+
+export function GetTeamCounter(arg1:number,arg2:number,arg3:number,arg4:number):Promise<string>;
 
 export function GetTeamGroup():Promise<string>;
 
@@ -53,4 +77,8 @@ export function Greet(arg1:string):Promise<string>;
 
 export function SelectDb(arg1:string):Promise<string>;
 
+export function StartAutoScroll(arg1:number):Promise<string>;
+
 export function StatisticsReport(arg1:number):Promise<string>;
+
+export function StopAutoScroll():Promise<string>;

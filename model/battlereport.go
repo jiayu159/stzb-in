@@ -1,8 +1,7 @@
 package model
 
 type BattleReport struct {
-	ID                    int64  `json:"id" gorm:"id"`
-	BattleId              int64  `json:"battle_id" gorm:"column:battle_id;uniqueIndex"`
+	BattleId              int64  `json:"battle_id" gorm:"column:battle_id;primaryKey"`
 	AttackHelpId          string `json:"attack_help_id" gorm:"attack_help_id"`
 	Time                  int64  `json:"time" gorm:"time"`
 	Wid                   string `json:"wid" gorm:"wid"`

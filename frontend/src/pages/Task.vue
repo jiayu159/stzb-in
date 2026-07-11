@@ -1,19 +1,20 @@
 <script setup>
-import { ref, onMounted, computed, watch } from 'vue'
+import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import {
     NCard, NButton, NSpace, NTag, NEmpty,
     NInput, NFormItem, NSelect, NDatePicker, NPopconfirm, NModal,
-    NDataTable, NStatistic, NSpin,
+    NDataTable, NStatistic, NSpin, NProgress, NAlert,
     useMessage, useDialog
 } from 'naive-ui'
+import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
     GetTeamGroup, CreateTask, GetTaskList, DeleteTask,
     EnableGetReport, DisableGetReport, GetReportNumByTaskId, StatisticsReport,
-    GetTask, DeleteTaskReport
+    GetTask, DeleteTaskReport, ExportTaskReport
 } from '../../wailsjs/go/main/App'
 import { formatTimestampMs, splitwid } from '@/utils/format'
 import * as XLSX from 'xlsx'
-import { Plus, RefreshCw, Eye, Play, Trash2, Eraser } from 'lucide-vue-next'
+import { Plus, RefreshCw, Eye, Play, Trash2, Eraser, Timer } from 'lucide-vue-next'
 
 const nmessage = useMessage()
 const addtaskshow = ref(false)
@@ -109,14 +110,34 @@ const getReportNumTimer = ref(null)
 const inStatistics = ref(false)
 const curtaskid = ref(0)
 
+// 时间定位相关
+const endTimeTarget = ref(null) // 用户设定的截止时间 (ms)
+const latestReportTime = ref(0) // 最近一条战报的时间
+const reportProgressPct = ref(0) // 进度百分比
+const timeReached = ref(false) // 是否已到达截止时间
+const showEndTimePicker = ref(false)
+
 const enableGetReport = (id, pos) => {
     showModal.value = true
-    EnableGetReport(pos)
-    getReporting.value = true
+    endTimeTarget.value = null
+    latestReportTime.value = 0
+    reportProgressPct.value = 0
+    timeReached.value = false
+    showEndTimePicker.value = true
     reportNum.value = 0
+    getReporting.value = false
+    inStatistics.value = false
     curtaskid.value = id
+}
+
+const startCapture = () => {
+    const endTime = endTimeTarget.value ? Math.floor(endTimeTarget.value / 1000) : 0
+    EnableGetReport(curtaskid.value, endTime)
+    getReporting.value = true
+    showEndTimePicker.value = false
+
     getReportNumTimer.value = setInterval(() => {
-        GetReportNumByTaskId(id).then(v => {
+        GetReportNumByTaskId(curtaskid.value).then(v => {
             let resp = JSON.parse(v)
             if (resp.code == 200) {
                 reportNum.value = resp.data.count
@@ -130,11 +151,55 @@ const stopReport = () => {
     getReportNumTimer.value = null
     getReporting.value = false
     inStatistics.value = false
+    timeReached.value = false
     DisableGetReport()
 }
 
 watch(showModal, (val) => {
     if (!val) stopReport()
+})
+
+// 监听后端推送的进度
+let unlistenProgress = null
+let unlistenTimeReached = null
+
+onMounted(() => {
+    unlistenProgress = EventsOn('reportProgress', (data) => {
+        if (data.latestTime && data.latestTime > 0) {
+            latestReportTime.value = data.latestTime
+        }
+        reportNum.value = data.count || reportNum.value
+        if (endTimeTarget.value && data.latestTime > 0) {
+            const endSec = Math.floor(endTimeTarget.value / 1000)
+            const nowSec = data.latestTime
+            if (nowSec >= endSec) {
+                reportProgressPct.value = 100
+            } else {
+                reportProgressPct.value = Math.min(95, Math.round((nowSec / endSec) * 100))
+            }
+        }
+    })
+    unlistenTimeReached = EventsOn('reportTimeReached', () => {
+        timeReached.value = true
+    })
+})
+
+onUnmounted(() => {
+    if (unlistenProgress) EventsOff('reportProgress')
+    if (unlistenTimeReached) EventsOff('reportTimeReached')
+})
+
+// 格式化时间戳(秒)
+const formatSecTimestamp = (ts) => {
+    if (!ts) return '--'
+    return new Date(ts * 1000).toLocaleString()
+}
+
+const startCaptureText = computed(() => {
+    if (endTimeTarget.value) {
+        return `开始获取(截止: ${new Date(endTimeTarget.value).toLocaleString()})`
+    }
+    return '开始获取战报(不限时间)'
 })
 
 const statistics = () => {
@@ -188,6 +253,39 @@ const exportExcel = () => {
     XLSX.writeFile(wb, `${taskDetail.value.name}考勤表.xlsx`)
 }
 
+const exportEnhanced = (id) => {
+    ExportTaskReport(id).then(v => {
+        let r = JSON.parse(v)
+        if (r.code == 200) {
+            const d = r.data
+            const rows = d.rows || []
+            const sheetData = [
+                [`考勤报告: ${d.task_name || ''}`],
+                [`坐标: ${d.pos || ''}`, `目标分组: ${(d.target || []).join(',')}`],
+                [`目标人数: ${d.total}`, `实到: ${d.present}`, `缺席: ${d.absent}`, `出勤率: ${d.rate}%`],
+                [],
+                ['名字', '分组', '是否到位', '主力队伍', '拆迁队伍', '主力次数', '拆迁次数', '总次数']
+            ]
+            rows.forEach(r => {
+                sheetData.push([r.name, r.group, r.present, r.atk_teams, r.dis_teams, r.atk_num, r.dis_num, r.total])
+            })
+
+            const ws = XLSX.utils.aoa_to_sheet(sheetData)
+            ws['!merges'] = [
+                { s: { r: 0, c: 0 }, e: { r: 0, c: 7 } },
+                { s: { r: 1, c: 0 }, e: { r: 1, c: 7 } },
+                { s: { r: 2, c: 0 }, e: { r: 2, c: 7 } },
+            ]
+            const wb = XLSX.utils.book_new()
+            XLSX.utils.book_append_sheet(wb, ws, '考勤报告')
+            XLSX.writeFile(wb, `${d.task_name || '考勤'}_报告.xlsx`)
+            nmessage.success('导出成功')
+        } else {
+            nmessage.error(r.msg)
+        }
+    }).catch(e => nmessage.error('导出失败:' + e))
+}
+
 const detailColumns = [
     { title: '名称', key: 'name', sorter: 'default', defaultSortOrder: false },
     { title: '分组', key: 'group', sorter: 'default', defaultSortOrder: false },
@@ -233,13 +331,59 @@ const detailData = computed(() => {
     </n-modal>
 
     <n-modal v-model:show="showModal" preset="card" title="攻城考勤" size="huge" :bordered="false"
-        style="width: 600px" :mask-closable="false" to="body">
+        style="width: 680px" :mask-closable="false" to="body">
         <div class="report-modal">
             <p class="report-tip">请前往游戏中，到攻城任务坐标位置查看同盟战报，并勾选守城军士（否则获取不了拆迁战报）。然后一直往下滑直到没有战报为止</p>
-            <div class="report-counter">
+
+            <!-- 时间定位设置 -->
+            <n-alert v-if="showEndTimePicker" type="info" :bordered="false" style="margin-bottom:16px;text-align:left;">
+                <template #header>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <Timer :size="16" />
+                        智能翻阅
+                    </div>
+                </template>
+                <div style="font-size:13px;margin-bottom:10px;">
+                    设定截止时间后，翻阅时会自动跟踪进度：翻到该时间点之后存为的战报会被自动跳过。翻越早的战报，进度越接近100%。
+                </div>
+                <div style="display:flex;align-items:center;gap:12px;">
+                    <n-date-picker v-model:value="endTimeTarget" type="datetime"
+                        placeholder="选择截止时间（可选）" clearable style="flex:1;" />
+                    <n-button type="primary" :disabled="!getReporting && false"
+                        @click="startCapture">
+                        {{ startCaptureText }}
+                    </n-button>
+                </div>
+            </n-alert>
+
+            <!-- 实时进度 -->
+            <div v-if="getReporting" style="margin-bottom:16px;text-align:left;">
+                <n-alert v-if="timeReached" type="warning" :bordered="false" style="margin-bottom:12px;">
+                    检测到战报时间已早于截止时间，战报已自动跳过！如已翻阅到底部可点击"统计考勤数据"
+                </n-alert>
+                <div v-if="endTimeTarget" style="margin-bottom:8px;">
+                    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px;">
+                        <span>翻阅进度</span>
+                        <span>{{ reportProgressPct }}%</span>
+                    </div>
+                    <n-progress :value="reportProgressPct" :height="8" :border-radius="4"
+                        :color="timeReached ? '#f0ad4e' : '#18a058'" />
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+                    <n-statistic label="已获取战报" :value="reportNum">
+                        <template #suffix>
+                            <span style="font-size:14px;">封</span>
+                        </template>
+                    </n-statistic>
+                    <n-statistic label="最新战报时间" :value="formatSecTimestamp(latestReportTime)">
+                    </n-statistic>
+                </div>
+            </div>
+
+            <div v-if="!getReporting && !showEndTimePicker" class="report-counter">
                 <n-statistic label="已获取战报" :value="reportNum">
                     <template #suffix>
-                        <span style="font-size: 14px; color: #64748b;">封</span>
+                        <span style="font-size:14px;">封</span>
                     </template>
                 </n-statistic>
             </div>
@@ -249,11 +393,12 @@ const detailData = computed(() => {
                 <n-button strong secondary type="info" :loading="true" v-if="getReporting">
                     获取战报中
                 </n-button>
-                <n-button strong secondary type="success" @click="statistics" :loading="inStatistics">
+                <n-button v-if="getReporting || reportNum > 0" strong secondary type="success"
+                    @click="statistics" :loading="inStatistics">
                     {{ inStatistics ? '统计考勤数据中' : '已获取完战报，开始统计考勤数据' }}
                 </n-button>
                 <n-button strong secondary @click="showModal = false">
-                    取消
+                    {{ getReporting ? '取消并停止' : '关闭' }}
                 </n-button>
             </n-space>
         </template>
@@ -262,9 +407,14 @@ const detailData = computed(() => {
     <n-modal v-model:show="showModal2" preset="card" title="考勤详情" size="huge" :bordered="false"
         style="width: 1024px" :mask-closable="false" to="body">
         <div class="detail-modal">
-            <n-button type="primary" style="margin-bottom: 16px;" @click="exportExcel">
-                导出为表格
-            </n-button>
+            <n-space style="margin-bottom: 16px;">
+                <n-button type="primary" @click="exportExcel">
+                    导出为表格
+                </n-button>
+                <n-button type="success" @click="exportEnhanced(taskDetail.value.id)">
+                    导出增强版(含汇总)
+                </n-button>
+            </n-space>
             <n-data-table :columns="detailColumns" :data="detailData" :bordered="true" :single-line="false"
                 :max-height="500" />
         </div>

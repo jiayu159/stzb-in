@@ -26,8 +26,20 @@ export function DeleteTaskReport(arg1) {
   return window['go']['main']['App']['DeleteTaskReport'](arg1);
 }
 
+export function DisableAutoListen() {
+  return window['go']['main']['App']['DisableAutoListen']();
+}
+
+export function DisableBattleCall() {
+  return window['go']['main']['App']['DisableBattleCall']();
+}
+
 export function DisableBookData() {
   return window['go']['main']['App']['DisableBookData']();
+}
+
+export function DisableEnemyMonitor() {
+  return window['go']['main']['App']['DisableEnemyMonitor']();
 }
 
 export function DisableGetBattleReport() {
@@ -38,16 +50,40 @@ export function DisableGetReport() {
   return window['go']['main']['App']['DisableGetReport']();
 }
 
+export function EnableAutoListen() {
+  return window['go']['main']['App']['EnableAutoListen']();
+}
+
+export function EnableBattleCall() {
+  return window['go']['main']['App']['EnableBattleCall']();
+}
+
 export function EnableBookData() {
   return window['go']['main']['App']['EnableBookData']();
+}
+
+export function EnableEnemyMonitor() {
+  return window['go']['main']['App']['EnableEnemyMonitor']();
 }
 
 export function EnableGetBattleReport() {
   return window['go']['main']['App']['EnableGetBattleReport']();
 }
 
-export function EnableGetReport(arg1) {
-  return window['go']['main']['App']['EnableGetReport'](arg1);
+export function EnableGetReport(arg1, arg2) {
+  return window['go']['main']['App']['EnableGetReport'](arg1, arg2);
+}
+
+export function ExportTaskReport(arg1) {
+  return window['go']['main']['App']['ExportTaskReport'](arg1);
+}
+
+export function GetBattleReports(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetBattleReports'](arg1, arg2, arg3, arg4);
+}
+
+export function GetDashboardStats() {
+  return window['go']['main']['App']['GetDashboardStats']();
 }
 
 export function GetDbList() {
@@ -58,8 +94,16 @@ export function GetGroupWu() {
   return window['go']['main']['App']['GetGroupWu']();
 }
 
+export function GetHotRank() {
+  return window['go']['main']['App']['GetHotRank']();
+}
+
 export function GetLogs() {
   return window['go']['main']['App']['GetLogs']();
+}
+
+export function GetMemberActivity() {
+  return window['go']['main']['App']['GetMemberActivity']();
 }
 
 export function GetPlayerTeam(arg1, arg2, arg3, arg4, arg5) {
@@ -76,6 +120,10 @@ export function GetTask(arg1) {
 
 export function GetTaskList() {
   return window['go']['main']['App']['GetTaskList']();
+}
+
+export function GetTeamCounter(arg1, arg2, arg3, arg4) {
+  return window['go']['main']['App']['GetTeamCounter'](arg1, arg2, arg3, arg4);
 }
 
 export function GetTeamGroup() {
@@ -106,6 +154,14 @@ export function SelectDb(arg1) {
   return window['go']['main']['App']['SelectDb'](arg1);
 }
 
+export function StartAutoScroll(arg1) {
+  return window['go']['main']['App']['StartAutoScroll'](arg1);
+}
+
 export function StatisticsReport(arg1) {
   return window['go']['main']['App']['StatisticsReport'](arg1);
+}
+
+export function StopAutoScroll() {
+  return window['go']['main']['App']['StopAutoScroll']();
 }

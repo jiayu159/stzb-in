@@ -2,6 +2,7 @@ import { createRouter, createWebHashHistory } from 'vue-router';
 import Index from './pages/Index.vue';
 import TeamUser from './pages/TeamUser.vue';
 import Task from './pages/Task.vue';
+import BattleReports from './pages/BattleReports.vue';
 import GroupWu from './pages/GroupWu.vue';
 import SelectDb from './pages/SelectDb.vue';
 import Logs from './pages/Logs.vue';
@@ -9,7 +10,11 @@ import NpcapHelp from './pages/NpcapHelp.vue';
 import Debug from './pages/Debug.vue';
 import TeamQuery from './pages/TeamQuery.vue';
 import Book from './pages/Book.vue';
-// import BattleCall from './pages/BattleCall.vue';
+import BattleCall from './pages/BattleCall.vue';
+import Dashboard from './pages/Dashboard.vue';
+import Activity from './pages/MemberActivity.vue';
+import HotRank from './pages/HotRank.vue';
+import TeamCounter from './pages/TeamCounter.vue';
 import TeamWinRate from './pages/TeamWinRate.vue';
 import { CheckNpcap } from '../wailsjs/go/main/App';
 
@@ -31,6 +36,12 @@ const routes = [
         name: 'task',
         component: Task,
         meta: { title: '攻城任务' }
+    },
+    {
+        path: '/battleReports',
+        name: 'battleReports',
+        component: BattleReports,
+        meta: { title: '同盟战报' }
     },
     {
         path: '/groupWu',
@@ -80,12 +91,36 @@ const routes = [
         component: Book,
         meta: { title: '主公簿' }
     },
-    // {
-    //     path: '/battlecall',
-    //     name: 'battlecall',
-    //     component: BattleCall,
-    //     meta: { title: '战役叫阵' }
-    // }
+    {
+        path: '/battlecall',
+        name: 'battlecall',
+        component: BattleCall,
+        meta: { title: '战役叫阵' }
+    },
+    {
+        path: '/dashboard',
+        name: 'dashboard',
+        component: Dashboard,
+        meta: { title: '赛季看板' }
+    },
+    {
+        path: '/activity',
+        name: 'activity',
+        component: Activity,
+        meta: { title: '活跃度分析' }
+    },
+    {
+        path: '/hotrank',
+        name: 'hotrank',
+        component: HotRank,
+        meta: { title: '热门排行' }
+    },
+    {
+        path: '/teamcounter',
+        name: 'teamcounter',
+        component: TeamCounter,
+        meta: { title: '队伍克制' }
+    }
 ]
 
 const router = createRouter({

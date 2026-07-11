@@ -13,6 +13,7 @@ import (
 	"stzbHelper/model"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
+	"gorm.io/gorm/clause"
 )
 
 func parseBookData(data []byte) {
@@ -128,44 +129,44 @@ func parseBookData(data []byte) {
 	}
 }
 
-// func parseBattleCallData(data []byte) {
-// 	var raw []interface{}
-// 	err := json.Unmarshal(data, &raw)
-// 	if err != nil {
-// 		log.Println("解析战役叫阵数据失败:", err)
-// 		return
-// 	}
+func parseBattleCallData(data []byte) {
+	var raw []interface{}
+	err := json.Unmarshal(data, &raw)
+	if err != nil {
+		log.Println("解析战役叫阵数据失败:", err)
+		return
+	}
 
-// 	var messages []map[string]interface{}
-// 	for _, item := range raw {
-// 		entry, ok := item.([]interface{})
-// 		if !ok || len(entry) < 2 {
-// 			continue
-// 		}
-// 		fields, ok := entry[1].([]interface{})
-// 		if !ok {
-// 			continue
-// 		}
-// 		msg := map[string]interface{}{}
-// 		if len(fields) > 4 {
-// 			msg["content"] = fields[4]
-// 		}
-// 		if len(fields) > 5 {
-// 			msg["timestamp"] = fields[5]
-// 		}
-// 		if len(fields) > 7 {
-// 			msg["alliance_name"] = fields[7]
-// 		}
-// 		if len(fields) > 44 {
-// 			msg["player_name"] = fields[44]
-// 		}
-// 		messages = append(messages, msg)
-// 	}
+	var messages []map[string]interface{}
+	for _, item := range raw {
+		entry, ok := item.([]interface{})
+		if !ok || len(entry) < 2 {
+			continue
+		}
+		fields, ok := entry[1].([]interface{})
+		if !ok {
+			continue
+		}
+		msg := map[string]interface{}{}
+		if len(fields) > 4 {
+			msg["content"] = fields[4]
+		}
+		if len(fields) > 5 {
+			msg["timestamp"] = fields[5]
+		}
+		if len(fields) > 7 {
+			msg["alliance_name"] = fields[7]
+		}
+		if len(fields) > 44 {
+			msg["player_name"] = fields[44]
+		}
+		messages = append(messages, msg)
+	}
 
-// 	if global.AppCtx != nil {
-// 		runtime.EventsEmit(global.AppCtx, "battleCallData", messages, string(data))
-// 	}
-// }
+	if global.AppCtx != nil {
+		runtime.EventsEmit(global.AppCtx, "battleCallData", messages, string(data))
+	}
+}
 
 func ParseData(cmdId int, data []byte) {
 	if global.IsDebug {
@@ -173,13 +174,13 @@ func ParseData(cmdId int, data []byte) {
 	}
 
 	if cmdId == 724 {
-		// if global.ExVar.NeedPushBattleCallData {
-		// 	go parseBattleCallData(parseZlibData(data))
-		// }
+		if global.ExVar.NeedPushBattleCallData || global.ExVar.NeedPushEnemyMonitor {
+			go parseBattleCallData(parseZlibData(data))
+		}
 	} else if cmdId == 103 {
 		parseTeamUser(data)
 	} else if cmdId == 92 {
-		if global.ExVar.NeedGetBattleData {
+		if global.ExVar.NeedGetBattleData || global.ExVar.NeedAutoScroll || global.ExVar.NeedAutoScrollDetect {
 			log.Println("已开启获取详细战报,目前会暂停考勤战报的获取")
 			parseBattleData(data)
 		} else {
@@ -236,6 +237,39 @@ type BattleData struct {
 func parseBattleData(data []byte) {
 	msgdata := parseZlibData(data)
 	fmt.Println("原始数据:", string(msgdata))
+
+	// 检测模式：标记已收到战报数据
+	if global.ExVar.NeedAutoScrollDetect {
+		log.Println("自动翻阅检测: 收到同盟战报数据,页面确认成功")
+		global.ExVar.AutoScrollDetected = true
+	}
+
+	// 调试日志：看看检测标志位的状态
+	if global.ExVar.NeedAutoScrollDetect || global.ExVar.NeedAutoScroll {
+		log.Printf("自动翻阅: parseBattleData 被调用, NeedAutoScrollDetect=%v NeedAutoScroll=%v AutoScrollDetected=%v",
+			global.ExVar.NeedAutoScrollDetect, global.ExVar.NeedAutoScroll, global.ExVar.AutoScrollDetected)
+	}
+
+	// 自动翻阅模式：检查时间边界
+	if (global.ExVar.NeedAutoScroll || global.ExVar.NeedAutoScrollDetect) && global.AppCtx != nil {
+		latestTime := int64(0)
+		var jsondata [][]any
+		json.Unmarshal(msgdata, &jsondata)
+		for _, v := range jsondata {
+			reportJSON, _ := json.Marshal(v[0])
+			var report model.Report
+			json.Unmarshal(reportJSON, &report)
+			if int64(report.Time) > latestTime {
+				latestTime = int64(report.Time)
+			}
+			// 如果战报时间早于截止时间，记录停止点
+			if global.ExVar.AutoScrollTargetTime > 0 && int64(report.Time) < global.ExVar.AutoScrollTargetTime && int64(report.Time) > 0 {
+				if int64(report.Time) > global.ExVar.AutoScrollStopTime {
+					global.ExVar.AutoScrollStopTime = int64(report.Time)
+				}
+			}
+		}
+	}
 
 	if len(msgdata) > 0 {
 		var rawData RawData
@@ -329,17 +363,30 @@ func parseBattleData(data []byte) {
 
 			fmt.Printf("保存战斗报告: %+v\n", report)
 
-			// 保存到数据库
-			result := model.Conn.Save(&report)
+			// 保存到数据库（upsert，避免重复 battle_id 冲突）
+			result := model.Conn.Clauses(clause.OnConflict{
+				Columns:   []clause.Column{{Name: "battle_id"}},
+				UpdateAll: true,
+			}).Create(&report)
 			if result.Error != nil {
 				log.Printf("保存战斗报告失败: %v", result.Error)
 			} else {
 				battleCount++
-				fmt.Printf("成功保存战斗报告, ID: %d, 影响行数: %d\n", report.BattleId, result.RowsAffected)
 			}
 		}
 
 		log.Printf("共处理 %d 条战斗记录", battleCount)
+	}
+
+	// 自动翻阅模式：推送进度到前端
+	if global.ExVar.NeedAutoScroll && global.AppCtx != nil {
+		var totalCount int64
+		model.Conn.Model(&model.BattleReport{}).Count(&totalCount)
+		runtime.EventsEmit(global.AppCtx, "autoScrollProgress", map[string]interface{}{
+			"reportCount": totalCount,
+			"latestTime":  global.ExVar.AutoScrollStopTime,
+			"targetTime":  global.ExVar.AutoScrollTargetTime,
+		})
 	}
 }
 
@@ -475,11 +522,10 @@ func splitAndFilter(input string, delimiter string) [][]string {
 }
 
 func parseReport(data []byte) {
-	log.Println("收到同盟战报消息")
-	if !global.ExVar.NeedGetReport {
-		log.Println("由于未开启获取战报,本次跳过解析")
+	if !global.ExVar.NeedGetReport && !global.ExVar.NeedAutoListenReport {
 		return
 	}
+	log.Println("收到同盟战报消息")
 	msgdata := parseZlibData(data)
 	if len(msgdata) > 0 {
 		var jsondata [][]any
@@ -487,6 +533,7 @@ func parseReport(data []byte) {
 
 		var reports []model.Report
 		var neededreports []model.Report
+		var latestTime int64
 
 		for _, v := range jsondata {
 			reportJSON, err := json.Marshal(v[0])
@@ -503,15 +550,55 @@ func parseReport(data []byte) {
 			}
 
 			reports = append(reports, report)
-			if report.Wid == global.ExVar.NeededReportPos {
+
+			// 攻城考勤：检查坐标 + 时间截止
+			if global.ExVar.NeedGetReport && report.Wid == global.ExVar.NeededReportPos {
+				if global.ExVar.NeededReportEndTime > 0 && int64(report.Time) < global.ExVar.NeededReportEndTime {
+					// 战报时间早于截止时间，标记为已到达边界
+					if global.AppCtx != nil {
+						runtime.EventsEmit(global.AppCtx, "reportTimeReached", map[string]interface{}{
+							"time":    report.Time,
+							"endTime": global.ExVar.NeededReportEndTime,
+						})
+					}
+					continue
+				}
 				neededreports = append(neededreports, report)
+			}
+
+			// 自动监听：推送新战报到前端
+			if global.ExVar.NeedAutoListenReport && global.AppCtx != nil {
+				runtime.EventsEmit(global.AppCtx, "newReport", report)
+			}
+
+			if int64(report.Time) > latestTime {
+				latestTime = int64(report.Time)
 			}
 		}
 
 		log.Println("解析同盟战报成功,共" + strconv.Itoa(len(reports)) + "条 符合条件的共" + strconv.Itoa(len(neededreports)) + "条")
+
+		// 保存攻城考勤战报
 		if len(neededreports) > 0 {
 			action := model.Conn.Save(&neededreports)
 			fmt.Println("数据库共新增" + strconv.Itoa(int(action.RowsAffected)) + "条战报")
+		}
+
+		// 推送到前端（用于实时显示抓取进度）
+		if global.ExVar.NeedGetReport && global.AppCtx != nil {
+			var totalCount int64
+			model.Conn.Model(&model.Report{}).Where("wid = ?", global.ExVar.NeededReportPos).Count(&totalCount)
+			runtime.EventsEmit(global.AppCtx, "reportProgress", map[string]interface{}{
+				"count":      totalCount,
+				"latestTime": latestTime,
+				"batchSize":  len(neededreports),
+			})
+		}
+
+		// 保存所有战报到 reports 表（自动监听模式）
+		if global.ExVar.NeedAutoListenReport {
+			action := model.Conn.Save(&reports)
+			fmt.Println("自动监听: 新增" + strconv.Itoa(int(action.RowsAffected)) + "条战报")
 		}
 	} else {
 		log.Println("解析同盟战报消息失败")

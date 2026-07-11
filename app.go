@@ -128,16 +128,29 @@ func (a *App) DeleteTask(id int) string {
 	return global.Response{Message: "删除任务成功"}.Success()
 }
 
-// EnableGetReport 开启战报获取
-func (a *App) EnableGetReport(pos int) string {
+// EnableGetReport 开启战报获取（带截止时间，0=不限）
+func (a *App) EnableGetReport(pos int, endTime int64) string {
 	global.ExVar.NeedGetReport = true
 	global.ExVar.NeededReportPos = pos
+	global.ExVar.NeededReportEndTime = endTime
 	return global.Response{Message: "开启获取战报成功"}.Success()
 }
 
 func (a *App) DisableGetReport() string {
 	global.ExVar.NeedGetReport = false
+	global.ExVar.NeededReportEndTime = 0
 	return global.Response{Message: "停止获取战报"}.Success()
+}
+
+// EnableAutoListen 开启同盟战报自动监听
+func (a *App) EnableAutoListen() string {
+	global.ExVar.NeedAutoListenReport = true
+	return global.Response{Message: "开启自动监听成功"}.Success()
+}
+
+func (a *App) DisableAutoListen() string {
+	global.ExVar.NeedAutoListenReport = false
+	return global.Response{Message: "关闭自动监听成功"}.Success()
 }
 
 // GetReportNumByTaskId 获取某任务的战报数量
@@ -250,6 +263,21 @@ func (a *App) EnableGetBattleReport() string {
 func (a *App) DisableGetBattleReport() string {
 	global.ExVar.NeedGetBattleData = false
 	return global.Response{Message: "关闭获取详细战报成功"}.Success()
+}
+
+// StartAutoScroll 开启鼠标滚轮自动翻阅（targetTime为Unix秒戳截止时间，0=不限）
+func (a *App) StartAutoScroll(targetTime int64) string {
+	global.ExVar.NeedGetBattleData = true
+	global.ExVar.NeedGetReport = false
+	go StartMouseScroll(targetTime)
+	return global.Response{Message: "已开启自动翻阅"}.Success()
+}
+
+// StopAutoScroll 关闭自动翻阅
+func (a *App) StopAutoScroll() string {
+	StopAutoScrollByBackend()
+	global.ExVar.NeedGetBattleData = false
+	return global.Response{Message: "已关闭自动翻阅"}.Success()
 }
 
 // EnableBookData 开启主公簿数据推送
@@ -690,6 +718,339 @@ func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pa
 		"total":    total,
 		"page":     page,
 		"pageSize": pageSize,
+	}}.Success()
+}
+
+// GetBattleReports 查询全部战斗记录
+func (a *App) GetBattleReports(name string, minHp int, page int, pageSize int) string {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 50
+	}
+
+	query := model.Conn.Model(&model.BattleReport{})
+	if name != "" {
+		namePattern := "%" + name + "%"
+		query = query.Where("attack_name LIKE ? OR defend_name LIKE ? OR wid_name LIKE ?", namePattern, namePattern, namePattern)
+	}
+	if minHp > 0 {
+		query = query.Where("attack_hp >= ? OR defend_hp >= ?", minHp, minHp)
+	}
+
+	var total int64
+	query.Count(&total)
+
+	var results []model.BattleReport
+	query.Order("time DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&results)
+
+	return global.Response{Data: map[string]interface{}{
+		"list":     results,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
+	}}.Success()
+}
+
+// EnableBattleCall 开启战役叫阵同步
+func (a *App) EnableBattleCall() string {
+	global.ExVar.NeedPushBattleCallData = true
+	return global.Response{Message: "开启战役叫阵同步成功"}.Success()
+}
+
+func (a *App) DisableBattleCall() string {
+	global.ExVar.NeedPushBattleCallData = false
+	return global.Response{Message: "关闭战役叫阵同步成功"}.Success()
+}
+
+// EnableEnemyMonitor 开启敌军动向监控
+func (a *App) EnableEnemyMonitor() string {
+	global.ExVar.NeedPushEnemyMonitor = true
+	return global.Response{Message: "开启敌军动向监控成功"}.Success()
+}
+
+func (a *App) DisableEnemyMonitor() string {
+	global.ExVar.NeedPushEnemyMonitor = false
+	return global.Response{Message: "关闭敌军动向监控成功"}.Success()
+}
+
+// GetDashboardStats 获取赛季数据看板
+func (a *App) GetDashboardStats() string {
+	type DashboardData struct {
+		MemberCount    int64 `json:"member_count"`
+		TotalWu        int64 `json:"total_wu"`
+		AvgWu          int64 `json:"avg_wu"`
+		TaskCount      int64 `json:"task_count"`
+		TotalBattles   int64 `json:"total_battles"`
+		TotalReports   int64 `json:"total_reports"`
+		BattleReport24 int64 `json:"battle_report_24h"`
+		MemberReport24 int64 `json:"member_report_24h"`
+	}
+
+	var data DashboardData
+
+	model.Conn.Model(&model.TeamUser{}).Select("COUNT(*)").Scan(&data.MemberCount)
+	model.Conn.Model(&model.TeamUser{}).Select("COALESCE(SUM(wu), 0)").Scan(&data.TotalWu)
+	model.Conn.Model(&model.TeamUser{}).Select("COALESCE(ROUND(AVG(wu)), 0)").Scan(&data.AvgWu)
+	model.Conn.Model(&model.Task{}).Select("COUNT(*)").Scan(&data.TaskCount)
+	model.Conn.Model(&model.BattleReport{}).Select("COUNT(*)").Scan(&data.TotalBattles)
+	model.Conn.Model(&model.Report{}).Select("COUNT(*)").Scan(&data.TotalReports)
+
+	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+	model.Conn.Model(&model.BattleReport{}).Where("time >= ?", cutoff).Select("COUNT(*)").Scan(&data.BattleReport24)
+	model.Conn.Model(&model.BattleReport{}).Where("time >= ?", cutoff).
+		Select("COUNT(DISTINCT attack_name) + COUNT(DISTINCT defend_name)").Scan(&data.MemberReport24)
+
+	return global.Response{Data: data}.Success()
+}
+
+// GetMemberActivity 获取成员活跃度分析
+func (a *App) GetMemberActivity() string {
+	type ActivityItem struct {
+		Name      string  `json:"name"`
+		Group     string  `json:"group"`
+		Wu        int     `json:"wu"`
+		Power     int     `json:"power"`
+		AtkCount  int64   `json:"atk_count"`
+		DefCount  int64   `json:"def_count"`
+		TotalBat  int64   `json:"total_bat"`
+		LastTime  int64   `json:"last_time"`
+		JoinDays  int64   `json:"join_days"`
+		Active24h bool    `json:"active_24h"`
+		Score     float64 `json:"score"`
+	}
+
+	var members []model.TeamUser
+	model.Conn.Find(&members)
+
+	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+	now := time.Now().Unix()
+
+	var results []ActivityItem
+	for _, m := range members {
+		var atkCount, defCount int64
+		var brAtk, brDef int64
+		var lastTime int64
+
+		// 从 battle_report（详细战报）统计
+		model.Conn.Model(&model.BattleReport{}).Where("attack_name = ?", m.Name).Count(&brAtk)
+		model.Conn.Model(&model.BattleReport{}).Where("defend_name = ?", m.Name).Count(&brDef)
+		model.Conn.Model(&model.BattleReport{}).Where("attack_name = ? OR defend_name = ?", m.Name, m.Name).
+			Select("COALESCE(MAX(time), 0)").Scan(&lastTime)
+
+		// 从 report（攻城/同盟战报）统计
+		var rptAtk int64
+		var rptLast int64
+		model.Conn.Model(&model.Report{}).Where("attack_name = ?", m.Name).Count(&rptAtk)
+		model.Conn.Model(&model.Report{}).Where("attack_name = ?", m.Name).
+			Select("COALESCE(MAX(time), 0)").Scan(&rptLast)
+
+		atkCount = brAtk + rptAtk
+		defCount = brDef
+		if rptLast > lastTime {
+			lastTime = rptLast
+		}
+
+		active24h := lastTime >= cutoff
+		totalBat := atkCount + defCount
+		joinDays := int64(0)
+		if m.JoinTime > 0 {
+			joinDays = (now - int64(m.JoinTime)) / 86400
+			if joinDays < 1 {
+				joinDays = 1
+			}
+		}
+
+		score := float64(totalBat)*0.4 + float64(m.Wu)/1000*0.3
+		if active24h {
+			score += 20
+		}
+		if joinDays > 0 {
+			score += float64(totalBat) / float64(joinDays) * 5
+		}
+
+		results = append(results, ActivityItem{
+			Name: m.Name, Group: m.Group, Wu: m.Wu, Power: m.Power,
+			AtkCount: atkCount, DefCount: defCount, TotalBat: totalBat,
+			LastTime: lastTime, JoinDays: joinDays, Active24h: active24h, Score: score,
+		})
+	}
+
+	sort.Slice(results, func(i, j int) bool {
+		return results[i].Score > results[j].Score
+	})
+
+	return global.Response{Data: results}.Success()
+}
+
+// GetHotRank 获取热门队伍排行（含战法搭配）
+func (a *App) GetHotRank() string {
+	type TeamEntry struct {
+		Hero1Id      int64   `json:"hero1_id"`
+		Hero2Id      int64   `json:"hero2_id"`
+		Hero3Id      int64   `json:"hero3_id"`
+		TotalBattles int64   `json:"total_battles"`
+		WinCount     int64   `json:"win_count"`
+		WinRate      float64 `json:"win_rate"`
+		AllSkillInfo string  `json:"all_skill_info"`
+		AttackerGear string  `json:"attacker_gear"`
+		AttackHeroType string `json:"attack_hero_type"`
+	}
+
+	query := `
+		SELECT
+			attack_hero1_id AS hero1_id,
+			attack_hero2_id AS hero2_id,
+			attack_hero3_id AS hero3_id,
+			COUNT(*) AS total_battles,
+			SUM(CASE WHEN result IN (1,2,3,4,10,18,19) THEN 1 ELSE 0 END) AS win_count,
+			MAX(all_skill_info) AS all_skill_info,
+			MAX(attacker_gear_info) AS attacker_gear,
+			MAX(attack_hero_type) AS attack_hero_type
+		FROM battle_report
+		WHERE attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
+			AND attack_hero1_id != attack_hero2_id AND attack_hero1_id != attack_hero3_id AND attack_hero2_id != attack_hero3_id
+			AND all_skill_info != '' AND all_skill_info IS NOT NULL
+			AND LENGTH(all_skill_info) - LENGTH(REPLACE(all_skill_info, ';', '')) = 6
+			AND result IN (0,1,2,3,4,6,7,8,10,13,18,19)
+			AND npc = 0
+			AND attack_hp >= 10000
+		GROUP BY attack_hero1_id, attack_hero2_id, attack_hero3_id
+		ORDER BY total_battles DESC
+		LIMIT 100
+	`
+
+	var results []TeamEntry
+	if err := model.Conn.Raw(query).Scan(&results).Error; err != nil {
+		return global.Response{Message: "查询失败: " + err.Error()}.Error()
+	}
+
+	for i := range results {
+		if results[i].TotalBattles > 0 {
+			results[i].WinRate = float64(int(float64(results[i].WinCount)/float64(results[i].TotalBattles)*1000)) / 10
+		}
+	}
+
+	return global.Response{Data: map[string]interface{}{
+		"teams": results,
+	}}.Success()
+}
+
+// GetTeamCounter 获取队伍克制分析
+func (a *App) GetTeamCounter(hero1Id int64, hero2Id int64, hero3Id int64, minBattles int) string {
+	type CounterTeam struct {
+		Hero1Id      int64   `json:"hero1_id"`
+		Hero2Id      int64   `json:"hero2_id"`
+		Hero3Id      int64   `json:"hero3_id"`
+		TotalBattles int64   `json:"total_battles"`
+		WinCount     int64   `json:"win_count"`
+		LossCount    int64   `json:"loss_count"`
+		WinRate      float64 `json:"win_rate"`
+		AllSkillInfo string  `json:"all_skill_info"`
+	}
+
+	if minBattles < 1 {
+		minBattles = 5
+	}
+
+	// 查这个队伍作为攻方时，遇到的守方队伍及胜率
+	query := `
+		SELECT
+			defend_hero1_id AS hero1_id,
+			defend_hero2_id AS hero2_id,
+			defend_hero3_id AS hero3_id,
+			COUNT(*) AS total_battles,
+			SUM(CASE WHEN result IN (1,2,3,4,10,18,19) THEN 1 ELSE 0 END) AS win_count,
+			SUM(CASE WHEN result = 0 THEN 1 ELSE 0 END) AS loss_count,
+			MAX(all_skill_info) AS all_skill_info
+		FROM battle_report
+		WHERE attack_hero1_id = ? AND attack_hero2_id = ? AND attack_hero3_id = ?
+			AND npc = 0
+			AND result IN (0,1,2,3,4,6,7,8,10,13,18,19)
+		GROUP BY defend_hero1_id, defend_hero2_id, defend_hero3_id
+		HAVING total_battles >= ?
+		ORDER BY total_battles DESC, win_count DESC
+		LIMIT 20
+	`
+
+	var asAttacker []CounterTeam
+	model.Conn.Raw(query, hero1Id, hero2Id, hero3Id, minBattles).Scan(&asAttacker)
+	for i := range asAttacker {
+		if asAttacker[i].TotalBattles > 0 {
+			asAttacker[i].WinRate = float64(int(float64(asAttacker[i].WinCount)/float64(asAttacker[i].TotalBattles)*1000)) / 10
+		}
+	}
+
+	// 查这个队伍作为守方时，遇到的攻方队伍及胜率
+	query2 := `
+		SELECT
+			attack_hero1_id AS hero1_id,
+			attack_hero2_id AS hero2_id,
+			attack_hero3_id AS hero3_id,
+			COUNT(*) AS total_battles,
+			SUM(CASE WHEN result = 0 THEN 1 ELSE 0 END) AS win_count,
+			SUM(CASE WHEN result IN (1,2,3,4,10,18,19) THEN 1 ELSE 0 END) AS loss_count,
+			MAX(all_skill_info) AS all_skill_info
+		FROM battle_report
+		WHERE defend_hero1_id = ? AND defend_hero2_id = ? AND defend_hero3_id = ?
+			AND npc = 0
+			AND result IN (0,1,2,3,4,6,7,8,10,13,18,19)
+		GROUP BY attack_hero1_id, attack_hero2_id, attack_hero3_id
+		HAVING total_battles >= ?
+		ORDER BY total_battles DESC, win_count DESC
+		LIMIT 20
+	`
+
+	var asDefender []CounterTeam
+	model.Conn.Raw(query2, hero1Id, hero2Id, hero3Id, minBattles).Scan(&asDefender)
+	for i := range asDefender {
+		if asDefender[i].TotalBattles > 0 {
+			asDefender[i].WinRate = float64(int(float64(asDefender[i].WinCount)/float64(asDefender[i].TotalBattles)*1000)) / 10
+		}
+	}
+
+	return global.Response{Data: map[string]interface{}{
+		"as_attacker": asAttacker,
+		"as_defender": asDefender,
+	}}.Success()
+}
+
+// ExportTaskReport 导出增强版考勤报告
+func (a *App) ExportTaskReport(id int) string {
+	var task model.Task
+	model.Conn.First(&task, id)
+	if task.Id == 0 {
+		return global.Response{Message: "任务不存在"}.Error()
+	}
+
+	var rows []map[string]interface{}
+	for _, user := range task.UserList {
+		present := "否"
+		if user.AtkNum > 0 || user.DisNum > 0 {
+			present = "是"
+		}
+		rows = append(rows, map[string]interface{}{
+			"name":       user.Name,
+			"group":      user.Group,
+			"present":    present,
+			"atk_teams":  user.AtkTeamNum,
+			"dis_teams":  user.DisTeamNum,
+			"atk_num":    user.AtkNum,
+			"dis_num":    user.DisNum,
+			"total":      user.AtkNum + user.DisNum,
+		})
+	}
+
+	return global.Response{Data: map[string]interface{}{
+		"task_name": task.Name,
+		"pos":       task.Pos,
+		"target":    task.Target,
+		"total":     task.TargetUserNum,
+		"present":   task.CompleteUserNum,
+		"absent":    task.TargetUserNum - task.CompleteUserNum,
+		"rate":      float64(int(float64(task.CompleteUserNum)/float64(task.TargetUserNum)*10000)) / 100,
+		"rows":      rows,
 	}}.Success()
 }
 

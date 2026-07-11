@@ -1,38 +1,15 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NStatistic, NSpace, NGrid, NGi, NAlert, NSpin, useMessage } from 'naive-ui'
-import { EnableGetBattleReport, DisableGetBattleReport, GetTaskList, GetTeamUser, CheckUpdate, GetVersion } from '../../wailsjs/go/main/App'
-import { BrowserOpenURL } from '../../wailsjs/runtime/runtime'
-import { RefreshCw, Download } from 'lucide-vue-next'
+import { NCard, NButton, NStatistic, NSpace, NGrid, NGi, NAlert, NTag, useMessage } from 'naive-ui'
+import { EnableGetBattleReport, DisableGetBattleReport, GetTaskList, GetTeamUser, GetVersion } from '../../wailsjs/go/main/App'
+import { Activity, Trophy, Shield, Crosshair, MessageSquare, List } from 'lucide-vue-next'
 
 const nmessage = useMessage()
 
 const taskCount = ref(0)
 const memberCount = ref(0)
 const version = ref('')
-const updateInfo = ref(null)
-const checkingUpdate = ref(false)
-
-const onCheckUpdate = () => {
-    checkingUpdate.value = true
-    updateInfo.value = null
-    CheckUpdate().then(v => {
-        let resp = JSON.parse(v)
-        if (resp.code == 200) {
-            updateInfo.value = resp.data
-        } else {
-            nmessage.error(resp.msg)
-        }
-    }).catch(e => {
-        nmessage.error('检查更新失败: ' + e)
-    }).finally(() => {
-        checkingUpdate.value = false
-    })
-}
-
-const openUpdateUrl = (url) => {
-    BrowserOpenURL(url)
-}
+const showNotice = ref(true)
 
 const onEnableGetBattleReport = () => {
     EnableGetBattleReport().then(v => {
@@ -93,6 +70,29 @@ onMounted(() => {
             </div>
         </div>
 
+        <n-alert v-if="showNotice" type="info" closable @close="showNotice = false"
+            style="border-radius: 12px;">
+            <template #header>
+                <strong>📢 版本更新公告</strong>
+            </template>
+            <div style="font-size: 13px; line-height: 1.8;">
+                <p>以下功能已可用：</p>
+                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0;">
+                    <n-tag :bordered="false" type="success" size="small">赛季看板</n-tag>
+                    <n-tag :bordered="false" type="success" size="small">活跃度分析</n-tag>
+                    <n-tag :bordered="false" type="success" size="small">战役叫阵</n-tag>
+                    <n-tag :bordered="false" type="success" size="small">敌军动向监控</n-tag>
+                    <n-tag :bordered="false" type="success" size="small">热门排行</n-tag>
+                    <n-tag :bordered="false" type="success" size="small">队伍克制分析</n-tag>
+                    <n-tag :bordered="false" type="success" size="small">考勤导出增强</n-tag>
+                    <n-tag :bordered="false" type="warning" size="small">同盟战报自动翻阅</n-tag>
+                    <n-tag :bordered="false" type="warning" size="small">攻城考勤时间定位</n-tag>
+                </div>
+                <p><strong>自动翻阅：</strong>在「同盟战报」页面设定截止时间，程序自动在游戏中翻页抓取战报，到达指定时间自动停止。</p>
+                <p><strong>时间定位：</strong>在「攻城考勤」弹窗中设定截止时间，翻阅时自动跟踪进度，翻越截止时间点的战报自动跳过。</p>
+            </div>
+        </n-alert>
+
         <n-grid :cols="3" :x-gap="16" :y-gap="16" class="stat-grid">
             <n-gi>
                 <n-card embedded size="small">
@@ -111,19 +111,6 @@ onMounted(() => {
             </n-gi>
         </n-grid>
 
-        <n-alert v-if="updateInfo && updateInfo.hasUpdate" type="success" :show-icon="true"
-            style="border-radius: 12px;">
-            <div style="margin-bottom: 8px;">
-                <strong>发现新版本：{{ updateInfo.latestVer }}</strong>（当前版本：{{ updateInfo.currentVer }}）
-            </div>
-            <div v-if="updateInfo.name" style="margin-bottom: 4px;">{{ updateInfo.name }}</div>
-            <div v-if="updateInfo.body" style="font-size: 13px; color: #64748b; white-space: pre-wrap;">{{ updateInfo.body }}</div>
-            <n-button size="small" type="primary" style="margin-top: 8px;" @click="openUpdateUrl(updateInfo.url)">
-                <template #icon><Download :size="14" /></template>
-                前往下载
-            </n-button>
-        </n-alert>
-
         <n-card class="control-card" title="控制面板" embedded>
             <div class="control-section">
                 <div class="control-item">
@@ -136,19 +123,35 @@ onMounted(() => {
                         <n-button @click="onDisableGetBattleReport">关闭</n-button>
                     </n-space>
                 </div>
-                <div class="control-item">
-                    <div class="control-item-info">
-                        <div class="control-item-title">检查更新</div>
-                        <div class="control-item-desc">
-                            <span v-if="updateInfo && !updateInfo.hasUpdate">当前已是最新版本 ({{ updateInfo.currentVer }})</span>
-                            <span v-else>检查是否有新版本可用</span>
-                        </div>
-                    </div>
-                    <n-button @click="onCheckUpdate" :loading="checkingUpdate">
-                        <template #icon><RefreshCw :size="14" /></template>
-                        检查更新
-                    </n-button>
-                </div>
+            </div>
+        </n-card>
+
+        <n-card class="quick-nav-card" title="新功能快捷入口" embedded>
+            <div class="quick-nav">
+                <n-button quaternary @click="$router.push('/dashboard')">
+                    <template #icon><Trophy :size="16" /></template>
+                    赛季看板
+                </n-button>
+                <n-button quaternary @click="$router.push('/activity')">
+                    <template #icon><Activity :size="16" /></template>
+                    活跃度分析
+                </n-button>
+                <n-button quaternary @click="$router.push('/battlecall')">
+                    <template #icon><MessageSquare :size="16" /></template>
+                    战役叫阵
+                </n-button>
+                <n-button quaternary @click="$router.push('/hotrank')">
+                    <template #icon><Shield :size="16" /></template>
+                    热门排行
+                </n-button>
+                <n-button quaternary @click="$router.push('/teamcounter')">
+                    <template #icon><Crosshair :size="16" /></template>
+                    队伍克制
+                </n-button>
+                <n-button quaternary @click="$router.push('/battlereports')">
+                    <template #icon><List :size="16" /></template>
+                    同盟战报(自动翻阅)
+                </n-button>
             </div>
         </n-card>
     </div>
