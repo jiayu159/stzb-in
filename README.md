@@ -1,6 +1,6 @@
 # stzbHelper
 率土之滨助手  
-后续版本不再开源 仅在交流群发布编译后的文件 并增加授权机制(不收费,授权文件会包含在发布的文件中,仅限制软件使用时间)   
+后续版本不再开源 仅在交流群发布编译后的文件
 [交流群](https://t.me/stzbHelper)
 ## 使用说明
 本程序依赖于 [Npcap](https://npcap.com/#download) 抓取网络数据包来获取战报与同盟成员信息, 所以你在使用前需要先安装Npcap(https://npcap.com/dist/npcap-1.82.exe)  
