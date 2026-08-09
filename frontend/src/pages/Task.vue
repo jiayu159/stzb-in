@@ -8,7 +8,7 @@ import {
 } from 'naive-ui'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
-    GetTeamGroup, CreateTask, GetTaskList, DeleteTask,
+    GetTeamGroup, CreateTask, GetTaskList, DeleteTask, GetTeamUser,
     EnableGetReport, DisableGetReport, GetReportNumByTaskId, StatisticsReport,
     GetTask, DeleteTaskReport, ExportTaskReport
 } from '../../wailsjs/go/main/App'
@@ -27,6 +27,74 @@ const createing = ref(false)
 const tasks = ref([])
 const taskNum = ref(0)
 const loading = ref(false)
+
+// 城池分配助手：对每个目标分组，从用户填写的候选城池中选出离组内所有成员距离总和最近的城
+const assignCities = ref('')
+const assignLoading = ref(false)
+const assignResults = ref([])
+
+// pos 为 x*10000+y 格式（x 三位数，y 补足四位数）
+const parsePos = (pos) => {
+    const p = Math.abs(pos)
+    return { x: Math.floor(p / 10000), y: p % 10000 }
+}
+
+const calcAssign = () => {
+    const lines = assignCities.value.split('\n').map(l => l.trim()).filter(Boolean)
+    const cities = []
+    lines.forEach(l => {
+        const parts = l.split(/[,，\s]+/)
+        const x = parseInt(parts[0], 10)
+        const y = parseInt(parts[1], 10)
+        if (!isNaN(x) && !isNaN(y)) cities.push({ x, y })
+    })
+    if (cities.length === 0) {
+        nmessage.warning('请至少填写一个候选城池坐标（每行一个，格式：x,y）')
+        return
+    }
+    if (targetgroup.value.length === 0) {
+        nmessage.warning('请先选择目标分组')
+        return
+    }
+    assignLoading.value = true
+    GetTeamUser("").then(v => {
+        let resp = JSON.parse(v)
+        if (resp.code != 200) {
+            nmessage.error(resp.msg)
+            return
+        }
+        const users = resp.data || []
+        assignResults.value = targetgroup.value.map(g => {
+            const members = users.filter(u => u.group === g && u.pos > 0)
+            if (members.length === 0) {
+                return { group: g, memberCount: 0, city: null, totalDist: 0, empty: true }
+            }
+            let best = null
+            cities.forEach(c => {
+                let dist = 0
+                members.forEach(m => {
+                    const mp = parsePos(m.pos)
+                    dist += Math.hypot(c.x - mp.x, c.y - mp.y)
+                })
+                if (!best || dist < best.dist) best = { city: c, dist }
+            })
+            return { group: g, memberCount: members.length, city: best.city, totalDist: Math.round(best.dist * 100) / 100 }
+        })
+        if (assignResults.value.every(r => r.empty)) {
+            nmessage.warning('所选分组内没有成员的坐标数据')
+        }
+    }).catch(e => {
+        nmessage.error('获取成员坐标失败:' + e)
+    }).finally(() => {
+        assignLoading.value = false
+    })
+}
+
+const fillAssignPos = (r) => {
+    if (!r.city) return
+    taskpos.value = [String(r.city.x), String(r.city.y)]
+    nmessage.success(`已填入任务坐标：${r.city.x},${r.city.y}`)
+}
 
 const createTask = () => {
     createing.value = true
@@ -303,7 +371,7 @@ const detailData = computed(() => {
 
 <template>
     <n-modal v-model:show="addtaskshow" preset="card" title="新增任务" size="huge" :bordered="false"
-        style="width: 520px" :mask-closable="false" to="body">
+        style="width: 640px" :mask-closable="false" to="body">
         <div class="modal-form">
             <n-form-item label="任务名称">
                 <n-input v-model:value="taskname" placeholder="例如：内黄LV5 或者你也可以随意填写" />
@@ -317,6 +385,40 @@ const detailData = computed(() => {
             <n-form-item label="目标分组">
                 <n-select v-model:value="targetgroup" multiple :options="grouplist" placeholder="请选择分组" />
             </n-form-item>
+
+            <!-- 城池分配助手：对每个分组自动分配离组内成员总距离最近的城 -->
+            <n-alert type="info" :bordered="false" style="margin-bottom:8px;">
+                <template #header>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <Timer :size="15" />
+                        城池分配助手
+                    </div>
+                </template>
+                <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+                    <n-input v-model:value="assignCities" type="textarea" :rows="3"
+                        placeholder="候选城池坐标，每行一个，格式：x,y（例如 580,1032）" />
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <n-button size="small" type="primary" @click="calcAssign" :loading="assignLoading">
+                            按分组自动分配
+                        </n-button>
+                        <span style="font-size:12px;opacity:0.7;">
+                            为每个目标分组选出到组内所有成员坐标距离总和最小的城池
+                        </span>
+                    </div>
+                    <div v-if="assignResults.length > 0" class="assign-results">
+                        <div class="assign-row" v-for="r in assignResults" :key="r.group">
+                            <div class="assign-info">
+                                <span class="assign-group">{{ r.group }}</span>
+                                <span v-if="r.empty">组内暂无成员坐标</span>
+                                <span v-else>推荐城：{{ r.city.x }},{{ r.city.y }} · 距离和：{{ r.totalDist }} · 成员 {{ r.memberCount }} 人</span>
+                            </div>
+                            <n-button size="tiny" type="success" :disabled="r.empty" @click="fillAssignPos(r)">
+                                填入
+                            </n-button>
+                        </div>
+                    </div>
+                </div>
+            </n-alert>
         </div>
         <template #footer>
             <n-space justify="end">
@@ -622,6 +724,35 @@ const detailData = computed(() => {
     display: flex;
     flex-direction: column;
     gap: 8px;
+}
+
+.assign-results {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.assign-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 10px;
+    background: var(--color-bg);
+    border-radius: 6px;
+}
+
+.assign-info {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    flex-wrap: wrap;
+}
+
+.assign-group {
+    font-weight: 600;
+    color: var(--color-primary);
 }
 
 .report-modal {

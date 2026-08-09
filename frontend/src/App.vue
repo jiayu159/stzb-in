@@ -3,7 +3,7 @@ import { h, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { NMessageProvider, NDialogProvider, NConfigProvider, NLayout, NLayoutSider, NLayoutContent, NMenu, NIcon, NButton } from 'naive-ui'
 import { zhCN, dateZhCN, darkTheme } from 'naive-ui'
-import { Home, Users, ClipboardList, Swords, UserRoundSearch, ScrollText, Bug, Moon, Sun, BookOpen, MessageSquare, BarChart3, FileText, Activity, Trophy, Shield, Crosshair } from 'lucide-vue-next'
+import { Home, Users, ClipboardList, Swords, UserRoundSearch, ScrollText, Bug, Moon, Sun, BookOpen, BarChart3, FileText, Activity, Trophy, Shield, Crosshair } from 'lucide-vue-next'
 
 import { useThemeStore } from './stores/theme'
 
@@ -65,11 +65,6 @@ const menuOptions = [
         label: '主公簿',
         key: 'book',
         icon: renderIcon(BookOpen)
-    },
-    {
-        label: '战役叫阵',
-        key: 'battlecall',
-        icon: renderIcon(MessageSquare)
     },
     {
         label: '赛季看板',

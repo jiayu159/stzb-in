@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"log"
@@ -406,7 +406,7 @@ func StartMouseScroll(targetTime int64) {
 					})
 				}
 				return
-			case <-time.After(50 * time.Millisecond):
+			case <-time.After(100 * time.Millisecond):
 				if !global.ExVar.NeedAutoScroll {
 					return
 				}

@@ -8,6 +8,24 @@ import { herocfg, skillcfg } from '../cfg'
 const heroMap = JSON.parse(herocfg)
 const skillMap = JSON.parse(skillcfg)
 
+// 名字→ID 反向映射
+const nameToIdMap = {}
+for (const [id, v] of Object.entries(heroMap)) {
+    if (v.name) nameToIdMap[v.name] = id
+}
+
+const resolveHeroId = (val) => {
+    const trimmed = val.trim()
+    if (/^\d+$/.test(trimmed)) return parseInt(trimmed)
+    const id = nameToIdMap[trimmed]
+    if (id) return parseInt(id)
+    // 部分匹配
+    for (const [name, id] of Object.entries(nameToIdMap)) {
+        if (name.includes(trimmed)) return parseInt(id)
+    }
+    return NaN
+}
+
 const nmessage = useMessage()
 const loading = ref(false)
 const hero1Id = ref('')
@@ -21,7 +39,8 @@ const asDefender = ref([])
 
 const getHeroName = (id) => {
     if (!id) return ''
-    const hero = heroMap[String(Number(id) >= 130000 ? Number(id) - 30000 : Number(id))]
+    const normalized = Number(id) >= 130000 ? Number(id) - 30000 : Number(id)
+    const hero = heroMap[String(normalized)]
     return hero ? hero.name : `未知(${id})`
 }
 
@@ -46,11 +65,11 @@ const parseSkillInfo = (str) => {
 }
 
 const doSearch = () => {
-    const h1 = parseInt(hero1Id.value)
-    const h2 = parseInt(hero2Id.value)
-    const h3 = parseInt(hero3Id.value)
-    if (!h1 || !h2 || !h3) {
-        nmessage.warning('请输入三个武将ID')
+    const h1 = resolveHeroId(hero1Id.value)
+    const h2 = resolveHeroId(hero2Id.value)
+    const h3 = resolveHeroId(hero3Id.value)
+    if (isNaN(h1) || isNaN(h2) || isNaN(h3)) {
+        nmessage.warning('请输入三个武将ID或名称')
         return
     }
     loading.value = true
@@ -108,7 +127,7 @@ import { h } from 'vue'
             <div class="page-header">
                 <div class="page-header-info">
                     <h2 class="page-title">队伍克制分析</h2>
-                    <p class="page-desc">输入我方队伍（三个武将ID），查看遇到各对手的胜率</p>
+                    <p class="page-desc">输入我方三个武将（ID或名称），查看遇到各对手的胜率</p>
                 </div>
             </div>
 
@@ -122,19 +141,19 @@ import { h } from 'vue'
 
             <div class="search-bar">
                 <div class="hero-input-group">
-                    <span class="hero-input-label">武将1 ID</span>
-                    <n-input v-model:value="hero1Id" placeholder="如 10027" clearable @keyup.enter="doSearch" />
-                    <span class="hero-input-name" v-if="hero1Id && getHeroName(hero1Id)">{{ getHeroName(hero1Id) }}</span>
+                    <span class="hero-input-label">武将1</span>
+                    <n-input v-model:value="hero1Id" placeholder="ID或名称 如 10027/吕布" clearable @keyup.enter="doSearch" />
+                    <span class="hero-input-name" v-if="hero1Id && getHeroName(resolveHeroId(hero1Id))">{{ getHeroName(resolveHeroId(hero1Id)) }}</span>
                 </div>
                 <div class="hero-input-group">
-                    <span class="hero-input-label">武将2 ID</span>
-                    <n-input v-model:value="hero2Id" placeholder="如 10027" clearable @keyup.enter="doSearch" />
-                    <span class="hero-input-name" v-if="hero2Id && getHeroName(hero2Id)">{{ getHeroName(hero2Id) }}</span>
+                    <span class="hero-input-label">武将2</span>
+                    <n-input v-model:value="hero2Id" placeholder="ID或名称 如 10027/吕布" clearable @keyup.enter="doSearch" />
+                    <span class="hero-input-name" v-if="hero2Id && getHeroName(resolveHeroId(hero2Id))">{{ getHeroName(resolveHeroId(hero2Id)) }}</span>
                 </div>
                 <div class="hero-input-group">
-                    <span class="hero-input-label">武将3 ID</span>
-                    <n-input v-model:value="hero3Id" placeholder="如 10027" clearable @keyup.enter="doSearch" />
-                    <span class="hero-input-name" v-if="hero3Id && getHeroName(hero3Id)">{{ getHeroName(hero3Id) }}</span>
+                    <span class="hero-input-label">武将3</span>
+                    <n-input v-model:value="hero3Id" placeholder="ID或名称 如 10027/吕布" clearable @keyup.enter="doSearch" />
+                    <span class="hero-input-name" v-if="hero3Id && getHeroName(resolveHeroId(hero3Id))">{{ getHeroName(resolveHeroId(hero3Id)) }}</span>
                 </div>
                 <div class="hero-input-group">
                     <span class="hero-input-label">最低场次</span>

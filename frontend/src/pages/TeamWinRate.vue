@@ -14,7 +14,6 @@ const results = ref([])
 
 const searchName = ref('')
 const searchUnion = ref('')
-const searchIdu = ref('')
 const minLevel = ref(30)
 const minHp = ref(20000)
 
@@ -32,7 +31,7 @@ const doSearch = (newPage) => {
     results.value = []
     hasSearched.value = true
     const apiFn = groupByPlayer.value ? GetTeamWinRate : GetTeamWinRateByTeam
-    apiFn(searchName.value, searchUnion.value, searchIdu.value, page.value, pageSize.value, minLevel.value, minHp.value).then(v => {
+    apiFn(searchName.value, searchUnion.value, page.value, pageSize.value, minLevel.value, minHp.value).then(v => {
         let resp = JSON.parse(v)
         if (resp.code == 200) {
             results.value = resp.data.list || []
@@ -385,7 +384,6 @@ const currentColumns = computed(() => groupByPlayer.value ? playerColumns : team
             <div class="search-bar">
                 <n-input v-model:value="searchName" placeholder="玩家名称" clearable @keyup.enter="doSearch" />
                 <n-input v-model:value="searchUnion" placeholder="同盟名称" clearable @keyup.enter="doSearch" />
-                <n-input v-model:value="searchIdu" placeholder="队伍 ID" clearable @keyup.enter="doSearch" />
                 <n-button type="primary" @click="doSearch()" :loading="loading">
                     <template #icon><Search :size="16" /></template>
                     查询

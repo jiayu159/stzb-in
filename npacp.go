@@ -2,17 +2,22 @@ package main
 
 import (
 	"encoding/binary"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
 	"github.com/google/gopacket/pcap"
 	"log"
+	"os"
 	"strconv"
+	"strings"
 	"stzbHelper/global"
 	"stzbHelper/model"
 	"sync"
 	"time"
+
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 var databaseSelected bool = false
@@ -69,8 +74,8 @@ func captureTCPPackets(deviceName string, wg *sync.WaitGroup) {
 	}
 	defer handle.Close()
 
-	// 设置过滤器，只捕获端口为 8001 的 TCP 数据包
-	filter := "tcp and src port 8001"
+	// 设置过滤器，捕获端口为 8001 的 TCP 数据包（双向：客户端->服务器请求 与 服务器->客户端响应）
+	filter := "tcp port 8001"
 	err = handle.SetBPFFilter(filter)
 	if err != nil {
 		log.Printf("无法在接口 %s 上设置过滤器: %v\n", deviceName, err)
@@ -95,8 +100,19 @@ var waitbuf = false
 func handlePacket(packet gopacket.Packet) {
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		if appLayer := packet.ApplicationLayer(); appLayer != nil {
-			PSH := tcpLayer.(*layers.TCP).PSH
+			psh := tcpLayer.(*layers.TCP).PSH
+			dstPort := int(tcpLayer.(*layers.TCP).DstPort)
 			payload := appLayer.Payload()
+
+			// 客户端 -> 服务器：请求方向（目标端口为8001）
+			if dstPort == 8001 {
+				handleClientRequest(packet, payload)
+				return
+			}
+
+			// 服务器 -> 客户端：响应方向（落盘记录响应帧，用于确认请求<->响应对应关系）
+			handleServerResponse(packet, payload)
+
 			if len(payload) < 8 {
 				return
 			}
@@ -129,7 +145,7 @@ func handlePacket(packet gopacket.Packet) {
 			}
 
 			var buf []byte
-			if PSH != true {
+			if psh != true {
 				waitbuf = true
 				fullbuf = append(fullbuf, payload...)
 				return
@@ -266,6 +282,287 @@ type Buffer struct {
 	Byte   []byte
 	pos    int
 	offset int
+}
+
+// ---------------- 客户端->服务器 请求方向处理（协议分析用） ----------------
+
+var (
+	clientReqFullbuf = []byte{}
+	clientReqWait    = false
+
+	// 按连接(5元组)分组重组的客户端请求流，避免多连接交错搅乱帧
+	clientStreamsMu sync.Mutex
+	clientStreams   = map[string]*clientStream{}
+)
+
+type clientStream struct {
+	buf []byte
+}
+
+const maxClientFrame = 8 * 1024 * 1024
+
+// handleClientRequest 客户端->服务器方向：按帧头长度字段[0:4]重组(总长=长度+4)，
+// 不依赖PSH，多分片/多帧合并均正确处理；按连接分组避免多连接交错。
+func handleClientRequest(packet gopacket.Packet, payload []byte) {
+	if payload == nil || len(payload) == 0 {
+		return
+	}
+	streamKey := ""
+	serverAddr := ""
+	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+		streamKey = tcpLayer.(*layers.TCP).SrcPort.String() + "-" + tcpLayer.(*layers.TCP).DstPort.String()
+	}
+	if ipLayer := packet.NetworkLayer(); ipLayer != nil {
+		dstPort := 0
+		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+			dstPort = int(tcpLayer.(*layers.TCP).DstPort)
+		}
+		switch ip := ipLayer.(type) {
+		case *layers.IPv4:
+			serverAddr = ip.DstIP.String() + ":" + strconv.Itoa(dstPort)
+		case *layers.IPv6:
+			serverAddr = ip.DstIP.String() + ":" + strconv.Itoa(dstPort)
+		}
+	}
+
+	clientStreamsMu.Lock()
+	st, ok := clientStreams[streamKey]
+	if !ok {
+		st = &clientStream{}
+		clientStreams[streamKey] = st
+	}
+	st.buf = append(st.buf, payload...)
+	var frames [][]byte
+	for len(st.buf) >= 4 {
+		need := int(binary.BigEndian.Uint32(st.buf[0:4])) + 4
+		if need < 4 || need > maxClientFrame {
+			st.buf = []byte{}
+			break
+		}
+		if len(st.buf) < need {
+			break
+		}
+		frames = append(frames, st.buf[:need])
+		st.buf = st.buf[need:]
+	}
+	clientStreamsMu.Unlock()
+
+	for _, buf := range frames {
+		// 无条件缓存44871翻页模板（供直连重放）
+		stashFetchTemplate(buf, serverAddr)
+		// 缓存建连握手帧（新连接的首个44871大帧）
+		stashLoginFrame(buf, serverAddr)
+		// 缓存登录后的初始化指令帧（打开战报列表/切换同盟战报等，翻页前必须重放）
+		stashInitFrame(buf, serverAddr, streamKey)
+		// 缓存 mode=0000000a 批量战报详情请求帧（翻页后拉取每条战报完整数据cmd=92）
+		stashBatchFrame(buf, serverAddr)
+		// 缓存 mode=0000005c 战报详情请求帧（含battle_id，回放可获得cmd=92完整战报）
+		stashDetailFrame(buf, serverAddr)
+		// 缓存 mode=000010e9 打开战报面板请求帧（详情请求前必须先打开面板）
+		stashOpenPanelFrame(buf, serverAddr)
+		// 落盘记录所有客户端请求（供逆向建连握手序列）
+		logClientRequest(buf, serverAddr, streamKey)
+		analyzeClientRequest(buf)
+	}
+}
+
+var reqLogMu sync.Mutex
+
+// ---------------- 服务器->客户端 响应方向处理（协议分析用） ----------------
+
+var (
+	serverStreamsMu sync.Mutex
+	serverStreams   = map[string]*serverStream{}
+)
+
+type serverStream struct {
+	buf []byte
+}
+
+// handleServerResponse 服务器->客户端方向：按帧头长度字段[0:4]重组后落盘记录，
+// 与 requests_debug.log 时间戳对照即可确认 每个请求 -> 哪些响应cmd 的对应关系。
+func handleServerResponse(packet gopacket.Packet, payload []byte) {
+	if payload == nil || len(payload) == 0 {
+		return
+	}
+	streamKey := ""
+	serverAddr := ""
+	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+		streamKey = tcpLayer.(*layers.TCP).SrcPort.String() + "-" + tcpLayer.(*layers.TCP).DstPort.String()
+	}
+	if ipLayer := packet.NetworkLayer(); ipLayer != nil {
+		srcPort := 0
+		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
+			srcPort = int(tcpLayer.(*layers.TCP).SrcPort)
+		}
+		switch ip := ipLayer.(type) {
+		case *layers.IPv4:
+			serverAddr = ip.SrcIP.String() + ":" + strconv.Itoa(srcPort)
+		case *layers.IPv6:
+			serverAddr = ip.SrcIP.String() + ":" + strconv.Itoa(srcPort)
+		}
+	}
+
+	serverStreamsMu.Lock()
+	st, ok := serverStreams[streamKey]
+	if !ok {
+		st = &serverStream{}
+		serverStreams[streamKey] = st
+	}
+	st.buf = append(st.buf, payload...)
+	var frames [][]byte
+	for len(st.buf) >= 4 {
+		need := int(binary.BigEndian.Uint32(st.buf[0:4])) + 4
+		if need < 4 || need > maxClientFrame {
+			st.buf = []byte{}
+			break
+		}
+		if len(st.buf) < need {
+			break
+		}
+		frames = append(frames, st.buf[:need])
+		st.buf = st.buf[need:]
+	}
+	serverStreamsMu.Unlock()
+
+	for _, buf := range frames {
+		logServerResponse(buf, serverAddr, streamKey)
+	}
+}
+
+var respLogMu sync.Mutex
+
+// logServerResponse 将服务器->客户端响应帧附加到 responses_debug.log
+func logServerResponse(buf []byte, serverAddr string, streamKey string) {
+	respLogMu.Lock()
+	defer respLogMu.Unlock()
+	f, err := os.OpenFile("responses_debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	if _, seen := seenRespStreams[streamKey]; !seen {
+		seenRespStreams[streamKey] = struct{}{}
+		f.WriteString("\n=== NEW CONNECTION " + streamKey + " " + serverAddr + " ===\n")
+	}
+	var cmdId int
+	if len(buf) >= 8 {
+		cmdId = int(binary.BigEndian.Uint32(buf[4:8]))
+	}
+	line := time.Now().Format("15:04:05.000") + " " + serverAddr + " cmd=" + strconv.Itoa(cmdId) + " len=" + strconv.Itoa(len(buf)) + "\n" + hex.EncodeToString(buf) + "\n"
+	f.WriteString(line)
+}
+
+var seenRespStreams = map[string]struct{}{}
+
+// logClientRequest 将所有客户端->服务器请求附加到 requests_debug.log（用于分析建连握手）
+func logClientRequest(buf []byte, serverAddr string, streamKey string) {
+	reqLogMu.Lock()
+	defer reqLogMu.Unlock()
+	f, err := os.OpenFile("requests_debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	// 新连接的第一帧打上连接标识，便于区分各会话/识别握手帧
+	if _, seen := seenStreams[streamKey]; !seen {
+		seenStreams[streamKey] = struct{}{}
+		f.WriteString("\n=== NEW CONNECTION " + streamKey + " " + serverAddr + " ===\n")
+	}
+	var cmdId int
+	if len(buf) >= 8 {
+		cmdId = int(binary.BigEndian.Uint32(buf[4:8]))
+	}
+	line := time.Now().Format("15:04:05.000") + " " + serverAddr + " cmd=" + strconv.Itoa(cmdId) + " len=" + strconv.Itoa(len(buf)) + "\n" + hex.EncodeToString(buf) + "\n"
+	f.WriteString(line)
+}
+
+var seenStreams = map[string]struct{}{}
+
+// decodeClientPayload 尝试按上下行相同的帧结构解析客户端请求
+// 帧结构(下行推断)：[0-3]包大小 [4-7]cmdId [8-11]? [12]类型 [13-16]? [17..]数据
+// 返回值: (类型描述, 解码后的可读内容)
+func decodeClientPayload(buf []byte) (int, string, string) {
+	if len(buf) < 13 {
+		return 0, "raw", hex.EncodeToString(buf)
+	}
+	actualSize := 0
+	btype := buf[12]
+	if len(buf) >= 4 {
+		actualSize = int(binary.BigEndian.Uint32(buf[0:4]))
+	}
+	desc := fmt.Sprintf("size=%d", actualSize)
+
+	if btype == 3 {
+		// zlib 压缩数据
+		if len(buf) > 17 && buf[0+17] == 120 && buf[1+17] == 156 {
+			body := parseZlibData(buf[17:])
+			if len(body) > 0 {
+				return 3, desc, string(body)
+			}
+		}
+		return 3, desc, "zlib数据(" + strconv.Itoa(len(buf)) + "字节)"
+	}
+	if btype == 5 {
+		// xor 152 加密数据
+		decoded := DecodeType5(buf[12:])
+		if decoded != "" {
+			return 5, desc, decoded
+		}
+		return 5, desc, "type5数据"
+	}
+	if btype == 2 {
+		// 尝试读明文
+		if len(buf) > 17 {
+			raw := string(buf[17:])
+			if strings.Contains(raw, "{") || strings.Contains(raw, "[") {
+				return 2, desc, raw
+			}
+		}
+		return 2, desc, hex.EncodeToString(buf)
+	}
+
+	// 兜底：尝试找 zlib 魔数
+	for i := 4; i < len(buf)-1; i++ {
+		if buf[i] == 120 && buf[i+1] == 156 {
+			body := parseZlibData(buf[i:])
+			if len(body) > 0 {
+				return int(buf[12]), "zlib@" + strconv.Itoa(i), string(body)
+			}
+		}
+	}
+	return int(buf[12]), desc, hex.EncodeToString(buf)
+}
+
+func analyzeClientRequest(buf []byte) {
+	if !global.ExVar.NeedCaptureRequests {
+		return
+	}
+	if global.AppCtx == nil {
+		return
+	}
+	info := map[string]interface{}{
+		"time": time.Now().Unix(),
+		"len":  len(buf),
+		"hex":  hex.EncodeToString(buf),
+	}
+	cmdId := 0
+	if len(buf) >= 8 {
+		cmdId = int(binary.BigEndian.Uint32(buf[4:8]))
+	}
+	info["cmdId"] = cmdId
+
+	t, d, body := decodeClientPayload(buf)
+	info["type"] = t
+	if len(body) > 2000 {
+		body = body[:2000] + "..."
+	}
+	info["body"] = body
+
+	if global.IsDebug {
+		log.Printf("[请求分析] cmdId=%d %s body=%s", cmdId, d, body)
+	}
+	runtime.EventsEmit(global.AppCtx, "clientRequest", info)
 }
 
 func (bb *Buffer) ResetOffset() {

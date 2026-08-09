@@ -33,6 +33,8 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	global.AppCtx = ctx
 	global.LogW.SetContext(ctx)
+	// 恢复直连缓存(握手帧/初始化帧/批量帧/请求模板)，避免重启后需重新滚动捕获
+	loadFetchCache()
 }
 
 // Greet returns a greeting for the given name
@@ -265,19 +267,84 @@ func (a *App) DisableGetBattleReport() string {
 	return global.Response{Message: "关闭获取详细战报成功"}.Success()
 }
 
-// StartAutoScroll 开启鼠标滚轮自动翻阅（targetTime为Unix秒戳截止时间，0=不限）
-func (a *App) StartAutoScroll(targetTime int64) string {
+// StartAutoScroll 开启自动翻阅（targetTime为Unix秒戳截止时间，0=不限；intervalMs为翻页间隔毫秒）
+// 模式由 SetScrollMode 决定：mouse=鼠标滚轮 adb=连接模拟器
+func (a *App) StartAutoScroll(targetTime int64, intervalMs int64) string {
 	global.ExVar.NeedGetBattleData = true
 	global.ExVar.NeedGetReport = false
+	if global.ExVar.ScrollMode == "adb" {
+		go StartAdbScroll(targetTime, intervalMs)
+		return global.Response{Message: "已开启模拟器自动翻阅"}.Success()
+	}
 	go StartMouseScroll(targetTime)
 	return global.Response{Message: "已开启自动翻阅"}.Success()
+}
+
+// SetScrollMode 设置自动翻阅模式：mouse/adb
+func (a *App) SetScrollMode(mode string) string {
+	if mode != "mouse" && mode != "adb" {
+		return global.Response{Message: "无效的翻阅模式"}.Error()
+	}
+	global.ExVar.ScrollMode = mode
+	return global.Response{Message: "已切换翻阅模式"}.Success()
+}
+
+// GetScrollMode 获取当前自动翻阅模式
+func (a *App) GetScrollMode() string {
+	return global.ExVar.ScrollMode
+}
+
+// CheckAdb 检测 adb 与模拟器连接状态
+func (a *App) CheckAdb() string {
+	adb := findAdbPath()
+	device := findEmulatorDevice()
+	if adb == "" {
+		return global.Response{Message: "未找到 adb，请安装 adb 或使用自带 adb 的模拟器"}.Error()
+	}
+	if device == "" {
+		return global.Response{Message: "adb 可用，但未检测到模拟器，请先启动模拟器并打开率土之滨"}.Error()
+	}
+	return global.Response{Message: fmt.Sprintf("已连接模拟器：%s", device)}.Success()
 }
 
 // StopAutoScroll 关闭自动翻阅
 func (a *App) StopAutoScroll() string {
 	StopAutoScrollByBackend()
+	StopAdbScroll()
 	global.ExVar.NeedGetBattleData = false
 	return global.Response{Message: "已关闭自动翻阅"}.Success()
+}
+
+// EnableCaptureRequests 开启客户端->服务器请求抓包分析（用于逆向战报翻页请求）
+func (a *App) EnableCaptureRequests() string {
+	global.ExVar.NeedCaptureRequests = true
+	return global.Response{Message: "已开启请求分析，请在游戏内滚动一次战报列表"}.Success()
+}
+
+// DisableCaptureRequests 关闭请求抓包分析
+func (a *App) DisableCaptureRequests() string {
+	global.ExVar.NeedCaptureRequests = false
+	return global.Response{Message: "已关闭请求分析"}.Success()
+}
+
+// GetFetchTemplate 获取最近捕获的翻页请求模板信息
+func (a *App) GetFetchTemplate() string {
+	return GetFetchTemplate()
+}
+
+// TestDirectFetch 直连服务器重放最近一条请求，验证协议可复现性
+func (a *App) TestDirectFetch() string {
+	return DirectFetchTest()
+}
+
+// DirectFetchLoop 免翻页直连拉取战报（targetTime=截止时间戳秒，0=不限）
+func (a *App) DirectFetchLoop(targetTime int64) string {
+	return DirectFetchLoop(targetTime)
+}
+
+// DirectFetchStop 停止免翻页拉取
+func (a *App) DirectFetchStop() string {
+	return DirectFetchStop()
 }
 
 // EnableBookData 开启主公簿数据推送
@@ -291,18 +358,6 @@ func (a *App) DisableBookData() string {
 	global.ExVar.NeedPushBookData = false
 	return global.Response{Message: "关闭主公簿数据推送成功"}.Success()
 }
-
-// // EnableBattleCall 开启战役叫阵数据推送
-// func (a *App) EnableBattleCall() string {
-// 	global.ExVar.NeedPushBattleCallData = true
-// 	return global.Response{Message: "开启战役叫阵数据推送成功"}.Success()
-// }
-
-// // DisableBattleCall 关闭战役叫阵数据推送
-// func (a *App) DisableBattleCall() string {
-// 	global.ExVar.NeedPushBattleCallData = false
-// 	return global.Response{Message: "关闭战役叫阵数据推送成功"}.Success()
-// }
 
 // GetDbList 获取当前目录下的数据库文件列表
 func (a *App) GetDbList() string {
@@ -422,7 +477,7 @@ func (a *App) CheckUpdate() string {
 }
 
 // GetPlayerTeam 查询玩家队伍
-func (a *App) GetPlayerTeam(name string, uname string, idu string, page int, pageSize int) string {
+func (a *App) GetPlayerTeam(name string, uname string, page int, pageSize int) string {
 	type PlayerTeam struct {
 		PlayerName   string `json:"player_name"`
 		BattleID     int    `json:"battle_id"`
@@ -455,7 +510,6 @@ func (a *App) GetPlayerTeam(name string, uname string, idu string, page int, pag
 
 	namePattern := "%" + name + "%"
 	unamePattern := "%" + uname + "%"
-	iduPattern := "%" + idu + "%"
 
 	baseQuery := `WITH ranked_data AS (
 		SELECT
@@ -486,7 +540,7 @@ func (a *App) GetPlayerTeam(name string, uname string, idu string, page int, pag
 		WHERE attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
 			AND attack_hero1_level >= 15 AND attack_hero2_level >= 15 AND attack_hero3_level >= 15
 			AND attack_hp >= 10000
-			AND attack_name LIKE ? AND attack_union_name LIKE ? AND attack_idu LIKE ?
+			AND attack_name LIKE ? AND attack_union_name LIKE ?
 			AND npc = 0 AND all_skill_info != "" AND all_skill_info IS NOT NULL
 		UNION ALL
 		SELECT
@@ -517,7 +571,7 @@ func (a *App) GetPlayerTeam(name string, uname string, idu string, page int, pag
 		WHERE defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
 			AND defend_hero1_level >= 15 AND defend_hero2_level >= 15 AND defend_hero3_level >= 15
 			AND defend_hp >= 10000
-			AND defend_name LIKE ? AND defend_union_name LIKE ? AND defend_idu LIKE ?
+			AND defend_name LIKE ? AND defend_union_name LIKE ?
 			AND npc = 0 AND all_skill_info != "" AND all_skill_info IS NOT NULL
 	),
 	deduplicated_data AS (
@@ -529,8 +583,8 @@ func (a *App) GetPlayerTeam(name string, uname string, idu string, page int, pag
 	)`
 
 	args := []interface{}{
-		namePattern, unamePattern, iduPattern,
-		namePattern, unamePattern, iduPattern,
+		namePattern, unamePattern,
+		namePattern, unamePattern,
 	}
 
 	// 查询总数
@@ -554,7 +608,7 @@ func (a *App) GetPlayerTeam(name string, uname string, idu string, page int, pag
 		return global.Response{Message: "查询失败: " + err.Error()}.Error()
 	}
 
-	log.Printf("查询玩家队伍: name=%s, union=%s, idu=%s, page=%d, total=%d, 结果: %d条", name, uname, idu, page, total, len(results))
+	log.Printf("查询玩家队伍: name=%s, union=%s, page=%d, total=%d, 结果: %d条", name, uname, page, total, len(results))
 	return global.Response{Data: map[string]interface{}{
 		"list":     results,
 		"total":    total,
@@ -564,7 +618,7 @@ func (a *App) GetPlayerTeam(name string, uname string, idu string, page int, pag
 }
 
 // GetTeamWinRate 查询队伍胜率统计
-func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pageSize int, minLevel int, minHp int) string {
+func (a *App) GetTeamWinRate(name string, uname string, page int, pageSize int, minLevel int, minHp int) string {
 	type TeamWinRate struct {
 		PlayerName   string  `json:"player_name"`
 		Hero1Id      int64   `json:"hero1_id"`
@@ -597,7 +651,6 @@ func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pa
 
 	namePattern := "%" + name + "%"
 	unamePattern := "%" + uname + "%"
-	iduPattern := "%" + idu + "%"
 
 	// 攻方: result IN (1,2,3,4,10,18,19) 胜, result=0 负, result IN (6,7,8,13) 平
 	// 守方: result=0 胜, result IN (1,2,3,4,10,18,19) 负, result IN (6,7,8,13) 平
@@ -629,7 +682,7 @@ func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pa
 			AND defend_hp >= ?
 			AND LENGTH(all_skill_info) - LENGTH(REPLACE(all_skill_info, ';', '')) = 6
 			AND LENGTH(REPLACE(all_skill_info, ',0,', ',')) = LENGTH(all_skill_info)
-			AND attack_name LIKE ? AND attack_union_name LIKE ? AND attack_idu LIKE ?
+			AND attack_name LIKE ? AND attack_union_name LIKE ?
 			AND npc = 0 AND result IN (0,1,2,3,4,6,7,8,10,13,18,19)
 		UNION ALL
 		SELECT
@@ -659,7 +712,7 @@ func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pa
 			AND attack_hp >= ?
 			AND LENGTH(all_skill_info) - LENGTH(REPLACE(all_skill_info, ';', '')) = 6
 			AND LENGTH(REPLACE(all_skill_info, ',0,', ',')) = LENGTH(all_skill_info)
-			AND defend_name LIKE ? AND defend_union_name LIKE ? AND defend_idu LIKE ?
+			AND defend_name LIKE ? AND defend_union_name LIKE ?
 			AND npc = 0 AND result IN (0,1,2,3,4,6,7,8,10,13,18,19)
 	),
 	aggregated AS (
@@ -685,8 +738,8 @@ func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pa
 	)`
 
 	args := []interface{}{
-		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern, iduPattern,
-		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern, iduPattern,
+		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern,
+		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern,
 	}
 
 	// 查询总数
@@ -712,7 +765,7 @@ func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pa
 		return global.Response{Message: "查询失败: " + err.Error()}.Error()
 	}
 
-	log.Printf("查询队伍胜率: name=%s, union=%s, idu=%s, page=%d, total=%d, 结果: %d条", name, uname, idu, page, total, len(results))
+	log.Printf("查询队伍胜率: name=%s, union=%s, page=%d, total=%d, 结果: %d条", name, uname, page, total, len(results))
 	return global.Response{Data: map[string]interface{}{
 		"list":     results,
 		"total":    total,
@@ -722,7 +775,8 @@ func (a *App) GetTeamWinRate(name string, uname string, idu string, page int, pa
 }
 
 // GetBattleReports 查询全部战斗记录
-func (a *App) GetBattleReports(name string, minHp int, page int, pageSize int) string {
+// GetBattleReports 查询战报（fightType: 0=全部 1=进攻 2=防守；myUnion 为当前同盟名，进攻/防守以当前同盟视角判断）
+func (a *App) GetBattleReports(name string, minHp int, fightType int, myUnion string, page int, pageSize int) string {
 	if page < 1 {
 		page = 1
 	}
@@ -735,7 +789,23 @@ func (a *App) GetBattleReports(name string, minHp int, page int, pageSize int) s
 		namePattern := "%" + name + "%"
 		query = query.Where("attack_name LIKE ? OR defend_name LIKE ? OR wid_name LIKE ?", namePattern, namePattern, namePattern)
 	}
-	if minHp > 0 {
+	if myUnion != "" {
+		if fightType == 1 { // 进攻：我盟为攻击方
+			query = query.Where("attack_union_name = ?", myUnion)
+			if minHp > 0 {
+				query = query.Where("attack_hp >= ?", minHp)
+			}
+		} else if fightType == 2 { // 防守：我盟为防守方
+			query = query.Where("defend_union_name = ?", myUnion)
+			if minHp > 0 {
+				query = query.Where("defend_hp >= ?", minHp)
+			}
+		} else {
+			if minHp > 0 {
+				query = query.Where("attack_hp >= ? OR defend_hp >= ?", minHp, minHp)
+			}
+		}
+	} else if minHp > 0 {
 		query = query.Where("attack_hp >= ? OR defend_hp >= ?", minHp, minHp)
 	}
 
@@ -753,15 +823,35 @@ func (a *App) GetBattleReports(name string, minHp int, page int, pageSize int) s
 	}}.Success()
 }
 
-// EnableBattleCall 开启战役叫阵同步
-func (a *App) EnableBattleCall() string {
-	global.ExVar.NeedPushBattleCallData = true
-	return global.Response{Message: "开启战役叫阵同步成功"}.Success()
+// GetMyUnionName 从同盟成员数据推断当前同盟名（成员参战战报中出现的同盟）
+func (a *App) GetMyUnionName() string {
+	var union string
+	model.Conn.Raw(`SELECT attack_union_name FROM battle_report
+		WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
+		AND attack_union_name != '' AND attack_union_name != defend_union_name
+		GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1`).Scan(&union)
+	if union == "" {
+		model.Conn.Raw(`SELECT defend_union_name FROM battle_report
+			WHERE defend_name IN (SELECT name FROM team_user WHERE name != '')
+			AND defend_union_name != '' AND defend_union_name != attack_union_name
+			GROUP BY defend_union_name ORDER BY COUNT(*) DESC LIMIT 1`).Scan(&union)
+	}
+	if union == "" {
+		model.Conn.Raw(`SELECT attack_union_name FROM battle_report
+			WHERE attack_union_name != ''
+			GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1`).Scan(&union)
+	}
+	if union == "" {
+		return global.Response{Message: "未能从战报推断出当前同盟，请先同步同盟成员并在战报列表翻页"}.Error()
+	}
+	return global.Response{Data: union}.Success()
 }
 
-func (a *App) DisableBattleCall() string {
-	global.ExVar.NeedPushBattleCallData = false
-	return global.Response{Message: "关闭战役叫阵同步成功"}.Success()
+// ExportAllBattleReports 导出所有战报（无分页）
+func (a *App) ExportAllBattleReports() string {
+	var results []model.BattleReport
+	model.Conn.Model(&model.BattleReport{}).Order("time DESC").Find(&results)
+	return global.Response{Data: results}.Success()
 }
 
 // EnableEnemyMonitor 开启敌军动向监控
@@ -1054,7 +1144,7 @@ func (a *App) ExportTaskReport(id int) string {
 	}}.Success()
 }
 
-func (a *App) GetTeamWinRateByTeam(name string, uname string, idu string, page int, pageSize int, minLevel int, minHp int) string {
+func (a *App) GetTeamWinRateByTeam(name string, uname string, page int, pageSize int, minLevel int, minHp int) string {
 	type TeamWinRateByTeam struct {
 		Hero1Id      int64   `json:"hero1_id"`
 		Hero2Id      int64   `json:"hero2_id"`
@@ -1086,7 +1176,6 @@ func (a *App) GetTeamWinRateByTeam(name string, uname string, idu string, page i
 
 	namePattern := "%" + name + "%"
 	unamePattern := "%" + uname + "%"
-	iduPattern := "%" + idu + "%"
 
 	baseQuery := `WITH battle_stats AS (
 		SELECT
@@ -1115,7 +1204,7 @@ func (a *App) GetTeamWinRateByTeam(name string, uname string, idu string, page i
 			AND defend_hp >= ?
 			AND LENGTH(all_skill_info) - LENGTH(REPLACE(all_skill_info, ';', '')) = 6
 			AND LENGTH(REPLACE(all_skill_info, ',0,', ',')) = LENGTH(all_skill_info)
-			AND attack_name LIKE ? AND attack_union_name LIKE ? AND attack_idu LIKE ?
+			AND attack_name LIKE ? AND attack_union_name LIKE ?
 			AND npc = 0 AND result IN (0,1,2,3,4,6,7,8,10,13,18,19)
 		UNION ALL
 		SELECT
@@ -1144,7 +1233,7 @@ func (a *App) GetTeamWinRateByTeam(name string, uname string, idu string, page i
 			AND attack_hp >= ?
 			AND LENGTH(all_skill_info) - LENGTH(REPLACE(all_skill_info, ';', '')) = 6
 			AND LENGTH(REPLACE(all_skill_info, ',0,', ',')) = LENGTH(all_skill_info)
-			AND defend_name LIKE ? AND defend_union_name LIKE ? AND defend_idu LIKE ?
+			AND defend_name LIKE ? AND defend_union_name LIKE ?
 			AND npc = 0 AND result IN (0,1,2,3,4,6,7,8,10,13,18,19)
 	),
 	aggregated AS (
@@ -1170,8 +1259,8 @@ func (a *App) GetTeamWinRateByTeam(name string, uname string, idu string, page i
 	)`
 
 	args := []interface{}{
-		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern, iduPattern,
-		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern, iduPattern,
+		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern,
+		minLevel, minLevel, minLevel, minHp, minLevel, minLevel, minLevel, minHp, namePattern, unamePattern,
 	}
 
 	dataQuery := baseQuery + ` SELECT hero1_id, hero2_id, hero3_id,
@@ -1290,7 +1379,7 @@ func (a *App) GetTeamWinRateByTeam(name string, uname string, idu string, page i
 	}
 	pageResults := allResults[start:end]
 
-	log.Printf("查询队伍胜率(按队伍): name=%s, union=%s, idu=%s, page=%d, total=%d, 结果: %d条", name, uname, idu, page, total, len(pageResults))
+	log.Printf("查询队伍胜率(按队伍): name=%s, union=%s, page=%d, total=%d, 结果: %d条", name, uname, page, total, len(pageResults))
 	return global.Response{Data: map[string]interface{}{
 		"list":     pageResults,
 		"total":    total,

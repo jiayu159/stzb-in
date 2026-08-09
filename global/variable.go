@@ -18,10 +18,14 @@ type WebExVar struct {
 	AutoScrollStopTime    int64 //自动翻阅实际停止时间戳(检测到早于此时间的战报时停止)
 	NeedAutoScrollDetect  bool  //是否正在检测同盟战报页面
 	AutoScrollDetected    bool  //是否检测到同盟战报数据
+	NeedCaptureRequests   bool  //是否开启客户端请求分析（抓取客户端->服务器请求包用于逆向重放）
+	ScrollMode            string //自动翻阅模式：mouse=鼠标滚轮 adb=连接模拟器
+	NeedAdbScroll         bool  //是否开启adb模拟器自动翻阅
 }
 
 var ExVar = WebExVar{
 	NeededReportEndTime: 0,
+	ScrollMode:          "mouse",
 }
 
 var IsDebug bool = false

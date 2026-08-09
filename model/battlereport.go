@@ -49,6 +49,21 @@ type BattleReport struct {
 	Npc                   int64  `json:"npc" gorm:"npc"`                                           // 是否为与npc战斗
 	AllSkillInfo          string `json:"all_skill_info" gorm:"all_skill_info"`                     // 技能信息
 	Result                int64  `json:"result" gorm:"result"`                                     // 战斗结果
+	ExtraResult           int64  `json:"extra_result" gorm:"extra_result"`                         // 额外结果
+	AttackerGongxun       int64  `json:"attacker_gongxun" gorm:"attacker_gongxun"`                 // 进攻方武勋
+	DefenderGongxun       int64  `json:"defender_gongxun" gorm:"defender_gongxun"`                 // 防守方武勋
+	AttackerXwc           int64  `json:"attacker_xwc" gorm:"attacker_xwc"`                         // 进攻方武策
+	DefenderXwc           int64  `json:"defender_xwc" gorm:"defender_xwc"`                         // 防守方武策
+	Garrison              int64  `json:"garrison" gorm:"garrison"`                                 // 0=主力 1=拆迁队
+	CityType              int64  `json:"city_type" gorm:"city_type"`                               // 城市类型
+	FightType             int64  `json:"fight_type" gorm:"fight_type"`                             // 战斗类型
+	AttackBaseHeroid      int64  `json:"attack_base_heroid" gorm:"attack_base_heroid"`             // 进攻方主将/队伍
+	AttackBaseLevel       int64  `json:"attack_base_level" gorm:"attack_base_level"`               // 进攻方主城/队伍等级
+	DefendBaseHeroid      int64  `json:"defend_base_heroid" gorm:"defend_base_heroid"`             // 防守方主将/队伍
+	DefendBaseLevel       int64  `json:"defend_base_level" gorm:"defend_base_level"`               // 防守方主城/队伍等级
+	FirstOccupyLvnLand    int64  `json:"first_occupy_lvn_land" gorm:"first_occupy_lvn_land"`       // 首占标记
+	PressAttack           int64  `json:"press_attack" gorm:"press_attack"`                         // 压制进攻
+	Military              int64  `json:"military" gorm:"military"`                                 // 军事标记
 }
 
 // TableName 表名称

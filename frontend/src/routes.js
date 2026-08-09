@@ -10,7 +10,6 @@ import NpcapHelp from './pages/NpcapHelp.vue';
 import Debug from './pages/Debug.vue';
 import TeamQuery from './pages/TeamQuery.vue';
 import Book from './pages/Book.vue';
-import BattleCall from './pages/BattleCall.vue';
 import Dashboard from './pages/Dashboard.vue';
 import Activity from './pages/MemberActivity.vue';
 import HotRank from './pages/HotRank.vue';
@@ -90,12 +89,6 @@ const routes = [
         name: 'book',
         component: Book,
         meta: { title: '主公簿' }
-    },
-    {
-        path: '/battlecall',
-        name: 'battlecall',
-        component: BattleCall,
-        meta: { title: '战役叫阵' }
     },
     {
         path: '/dashboard',

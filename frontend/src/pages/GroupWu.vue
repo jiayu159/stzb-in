@@ -101,11 +101,11 @@ onMounted(() => {
             <n-table v-if="groupdata.length > 0" :bordered="true" :single-line="false" class="styled-table">
                 <thead>
                     <tr>
-                        <th class="sortable-th" @click="toggleSort('group')">分组名称 <span class="sort-icon" v-if="sortKey==='group'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></th>
-                        <th class="sortable-th" @click="toggleSort('member_count')">人数 <span class="sort-icon" v-if="sortKey==='member_count'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></th>
-                        <th class="sortable-th" @click="toggleSort('total_wu')">总武勋 <span class="sort-icon" v-if="sortKey==='total_wu'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></th>
-                        <th class="sortable-th" @click="toggleSort('average_wu')">平均武勋 <span class="sort-icon" v-if="sortKey==='average_wu'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></th>
-                        <th class="sortable-th" @click="toggleSort('zero_wu_count')">0武勋人数 <span class="sort-icon" v-if="sortKey==='zero_wu_count'">{{ sortOrder === 'asc' ? '↑' : '↓' }}</span></th>
+                        <th class="sortable-th" @click="toggleSort('group')">分组名称 <span class="sort-icon" :class="{ 'active': sortKey==='group' }">{{ sortKey==='group' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</span></th>
+                        <th class="sortable-th" @click="toggleSort('member_count')">人数 <span class="sort-icon" :class="{ 'active': sortKey==='member_count' }">{{ sortKey==='member_count' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</span></th>
+                        <th class="sortable-th" @click="toggleSort('total_wu')">总武勋 <span class="sort-icon" :class="{ 'active': sortKey==='total_wu' }">{{ sortKey==='total_wu' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</span></th>
+                        <th class="sortable-th" @click="toggleSort('average_wu')">平均武勋 <span class="sort-icon" :class="{ 'active': sortKey==='average_wu' }">{{ sortKey==='average_wu' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</span></th>
+                        <th class="sortable-th" @click="toggleSort('zero_wu_count')">0武勋人数 <span class="sort-icon" :class="{ 'active': sortKey==='zero_wu_count' }">{{ sortKey==='zero_wu_count' ? (sortOrder === 'asc' ? '↑' : '↓') : '↕' }}</span></th>
                     </tr>
                 </thead>
                 <tbody>
@@ -181,8 +181,14 @@ onMounted(() => {
         }
 
         .sort-icon {
-            color: var(--color-primary);
+            color: var(--color-text-secondary);
+            opacity: 0.4;
             font-size: 12px;
+
+            &.active {
+                color: var(--color-primary);
+                opacity: 1;
+            }
         }
     }
 

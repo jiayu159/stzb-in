@@ -230,8 +230,23 @@ type BattleData struct {
 	Npc                   int64       `json:"npc"`
 	AllSkillInfo          string      `json:"all_skill_info"`
 	Result                int64       `json:"result"`
+	ExtraResult           int64       `json:"extra_result"`
 	AttackIdu             string      `json:"attack_idu"` //进攻方队伍ID
 	DefendIdu             string      `json:"defend_idu"` //防守方队伍ID
+	AttackerGongxun       int64       `json:"attacker_gongxun"` //进攻方武勋
+	DefenderGongxun       int64       `json:"defender_gongxun"` //防守方武勋
+	AttackerXwc           int64       `json:"attacker_xwc"`     //进攻方武策
+	DefenderXwc           int64       `json:"defender_xwc"`     //防守方武策
+	Garrison              int64       `json:"garrison"`         // 0=主力 1=拆迁队
+	CityType              int64       `json:"city_type"`        // 城市类型
+	FightType             int64       `json:"fight_type"`       // 战斗类型
+	AttackBaseHeroid      int64       `json:"attack_base_heroid"`
+	AttackBaseLevel       int64       `json:"attack_base_level"`
+	DefendBaseHeroid      int64       `json:"defend_base_heroid"`
+	DefendBaseLevel       int64       `json:"defend_base_level"`
+	FirstOccupyLvnLand    int64       `json:"first_occupy_lvn_land"` // 首占标记
+	PressAttack           int64       `json:"press_attack"`          // 压制进攻
+	Military              int64       `json:"military"`              // 军事(集结?)标记
 }
 
 func parseBattleData(data []byte) {
@@ -354,8 +369,23 @@ func parseBattleData(data []byte) {
 				Npc:                   battleData.Npc,
 				AllSkillInfo:          battleData.AllSkillInfo,
 				Result:                battleData.Result,
+				ExtraResult:           battleData.ExtraResult,
 				AttackIdu:             battleData.AttackIdu,
 				DefendIdu:             battleData.DefendIdu,
+				AttackerGongxun:       battleData.AttackerGongxun,
+				DefenderGongxun:       battleData.DefenderGongxun,
+				AttackerXwc:           battleData.AttackerXwc,
+				DefenderXwc:           battleData.DefenderXwc,
+				Garrison:              battleData.Garrison,
+				CityType:              battleData.CityType,
+				FightType:             battleData.FightType,
+				AttackBaseHeroid:      battleData.AttackBaseHeroid,
+				AttackBaseLevel:       battleData.AttackBaseLevel,
+				DefendBaseHeroid:      battleData.DefendBaseHeroid,
+				DefendBaseLevel:       battleData.DefendBaseLevel,
+				FirstOccupyLvnLand:    battleData.FirstOccupyLvnLand,
+				PressAttack:           battleData.PressAttack,
+				Military:              battleData.Military,
 			}
 
 			// 解析进阶信息和武将信息

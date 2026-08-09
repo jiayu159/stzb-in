@@ -1,41 +1,13 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NStatistic, NSpace, NGrid, NGi, NAlert, NTag, useMessage } from 'naive-ui'
-import { EnableGetBattleReport, DisableGetBattleReport, GetTaskList, GetTeamUser, GetVersion } from '../../wailsjs/go/main/App'
-import { Activity, Trophy, Shield, Crosshair, MessageSquare, List } from 'lucide-vue-next'
-
-const nmessage = useMessage()
+import { NCard, NButton, NStatistic, NGrid, NGi, NAlert, NTag } from 'naive-ui'
+import { GetTaskList, GetTeamUser, GetVersion } from '../../wailsjs/go/main/App'
+import { Activity, Trophy, Shield, Crosshair, List } from 'lucide-vue-next'
 
 const taskCount = ref(0)
 const memberCount = ref(0)
 const version = ref('')
 const showNotice = ref(true)
-
-const onEnableGetBattleReport = () => {
-    EnableGetBattleReport().then(v => {
-        let data = JSON.parse(v)
-        if (data.code == 200) {
-            nmessage.success('开启成功')
-        } else {
-            nmessage.error(data.msg)
-        }
-    }).catch(e => {
-        nmessage.error('开启获取战报详情失败:' + e)
-    })
-}
-
-const onDisableGetBattleReport = () => {
-    DisableGetBattleReport().then(v => {
-        let data = JSON.parse(v)
-        if (data.code == 200) {
-            nmessage.success('关闭成功')
-        } else {
-            nmessage.error(data.msg)
-        }
-    }).catch(e => {
-        nmessage.error('关闭获取战报详情失败:' + e)
-    })
-}
 
 onMounted(() => {
     GetVersion().then(v => {
@@ -80,7 +52,6 @@ onMounted(() => {
                 <div style="display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0;">
                     <n-tag :bordered="false" type="success" size="small">赛季看板</n-tag>
                     <n-tag :bordered="false" type="success" size="small">活跃度分析</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">战役叫阵</n-tag>
                     <n-tag :bordered="false" type="success" size="small">敌军动向监控</n-tag>
                     <n-tag :bordered="false" type="success" size="small">热门排行</n-tag>
                     <n-tag :bordered="false" type="success" size="small">队伍克制分析</n-tag>
@@ -111,21 +82,6 @@ onMounted(() => {
             </n-gi>
         </n-grid>
 
-        <n-card class="control-card" title="控制面板" embedded>
-            <div class="control-section">
-                <div class="control-item">
-                    <div class="control-item-info">
-                        <div class="control-item-title">获取详细战报</div>
-                        <div class="control-item-desc">用于查询队伍功能拉取战报使用，开启时无法获取攻城战报</div>
-                    </div>
-                    <n-space>
-                        <n-button type="primary" @click="onEnableGetBattleReport">开启</n-button>
-                        <n-button @click="onDisableGetBattleReport">关闭</n-button>
-                    </n-space>
-                </div>
-            </div>
-        </n-card>
-
         <n-card class="quick-nav-card" title="新功能快捷入口" embedded>
             <div class="quick-nav">
                 <n-button quaternary @click="$router.push('/dashboard')">
@@ -135,10 +91,6 @@ onMounted(() => {
                 <n-button quaternary @click="$router.push('/activity')">
                     <template #icon><Activity :size="16" /></template>
                     活跃度分析
-                </n-button>
-                <n-button quaternary @click="$router.push('/battlecall')">
-                    <template #icon><MessageSquare :size="16" /></template>
-                    战役叫阵
                 </n-button>
                 <n-button quaternary @click="$router.push('/hotrank')">
                     <template #icon><Shield :size="16" /></template>
@@ -184,40 +136,5 @@ onMounted(() => {
 
 .stat-grid {
     margin-top: 0;
-}
-
-.control-card {
-    border-radius: 12px;
-}
-
-.control-section {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
-
-.control-item {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px;
-    background: var(--color-surface-hover);
-    border-radius: 8px;
-
-    &-info {
-        flex: 1;
-    }
-
-    &-title {
-        font-size: 15px;
-        font-weight: 600;
-        color: var(--color-text);
-        margin-bottom: 4px;
-    }
-
-    &-desc {
-        font-size: 13px;
-        color: var(--color-text-secondary);
-    }
 }
 </style>

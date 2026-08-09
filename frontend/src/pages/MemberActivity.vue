@@ -1,8 +1,9 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NSpin, NEmpty, NTag, NDataTable, NPagination, NGi, NGrid, NStatistic, useMessage } from 'naive-ui'
+import { NCard, NButton, NSpin, NEmpty, NTag, NDataTable, NPagination, NGi, NGrid, NStatistic, NSpace, useMessage } from 'naive-ui'
 import { GetMemberActivity } from '../../wailsjs/go/main/App'
-import { RefreshCw, Users, Activity, Clock } from 'lucide-vue-next'
+import { RefreshCw, Download, Users, Activity, Clock } from 'lucide-vue-next'
+import * as XLSX from 'xlsx'
 
 const nmessage = useMessage()
 const loading = ref(false)
@@ -23,6 +24,38 @@ const loadData = () => {
 }
 
 onMounted(loadData)
+
+const exportExcel = () => {
+    if (members.value.length === 0) {
+        nmessage.warning('没有数据可导出')
+        return
+    }
+    let data = []
+    data.push(['排名', '名称', '分组', '武勋', '势力', '进攻场次', '防守场次', '总场次', '加入天数', '最近参战', '24h在线', '活跃度', '活跃等级'])
+    members.value.forEach((m, i) => {
+        const s = m.score || 0
+        data.push([
+            i + 1,
+            m.name,
+            m.group || '-',
+            m.wu || 0,
+            m.power || 0,
+            m.atk_count || 0,
+            m.def_count || 0,
+            m.total_bat || 0,
+            m.join_days || 0,
+            formatTime(m.last_time),
+            m.active_24h ? '在线' : '离线',
+            s.toFixed(1),
+            scoreLabel(s),
+        ])
+    })
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '活跃度')
+    XLSX.writeFile(wb, `活跃度分析_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
+    nmessage.success('导出成功')
+}
 
 const formatTime = (ts) => {
     if (!ts) return '从未参战'
@@ -101,10 +134,16 @@ import { h } from 'vue'
                     <h2 class="page-title">成员活跃度分析</h2>
                     <p class="page-desc">基于战报数据评估成员活跃度</p>
                 </div>
-                <n-button @click="loadData" :loading="loading">
-                    <template #icon><RefreshCw :size="16" /></template>
-                    刷新
-                </n-button>
+                <n-space align="center">
+                    <n-button @click="loadData" :loading="loading">
+                        <template #icon><RefreshCw :size="16" /></template>
+                        刷新
+                    </n-button>
+                    <n-button type="primary" @click="exportExcel" :disabled="members.length === 0">
+                        <template #icon><Download :size="16" /></template>
+                        导出表格
+                    </n-button>
+                </n-space>
             </div>
 
             <n-alert type="info" :show-icon="true" closable style="border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
