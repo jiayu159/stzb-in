@@ -569,12 +569,12 @@ onMounted(() => {
                     <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;width:100%;">
                         <span style="display:flex;align-items:center;gap:8px;">
                             <Timer :size="16" />
-                            协议请求分析（免翻页抓取）
+                            协议请求分析
                         </span>
                     </div>
                 </template>
                 <div style="font-size:13px;margin-bottom:10px;">
-                    开启后在游戏内打开「同盟战报」并滚动一次，本面板会实时显示客户端发给服务器的请求包，用于逆向翻页协议，实现不滚动页面直接请求战报。
+                    开启后在游戏内打开「同盟战报」并滚动一次，本面板会实时显示客户端发给服务器的请求包。
                 </div>
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                     <n-button :type="capturing ? 'warning' : 'primary'" @click="toggleCapture">
@@ -626,7 +626,7 @@ onMounted(() => {
                         <span style="display:flex;align-items:center;gap:8px;">
                             <Timer :size="16" />
                             免翻页直连拉取（方案B）
-                            <n-tag :bordered="false" type="error" size="small">还在开发中</n-tag>
+                            <n-tag :bordered="false" type="error" size="small">开发中</n-tag>
                         </span>
                     </div>
                 </template>
