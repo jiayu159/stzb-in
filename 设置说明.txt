@@ -1,8 +1,0 @@
-例子:
-win+r输入powershell
-
-cd D:\game_vs_project\stzbHelper-main\stzbHelper-main    //先打开对应路径
-Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass -Force  //运行前先输入这个
-.\set-interval.ps1             # 交互输入
-.\set-interval.ps1 -IntervalMs 200   # 直接指定
-单位都是ms
