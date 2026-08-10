@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { NCard, NButton, NInput, NInputNumber, NEmpty, NSpin, NTag, NPagination, NSpace, NAlert, NDatePicker, NProgress, NStatistic, NModal, NCountdown, NCollapse, NCollapseItem, NRadioGroup, NRadioButton, NSelect, useMessage } from 'naive-ui'
+import { NCard, NButton, NInput, NInputNumber, NEmpty, NSpin, NTag, NPagination, NSpace, NAlert, NDatePicker, NProgress, NStatistic, NModal, NCollapse, NCollapseItem, NSelect, useMessage } from 'naive-ui'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { GetBattleReports, ExportAllBattleReports, StartAutoScroll, StopAutoScroll, EnableCaptureRequests, DisableCaptureRequests, TestDirectFetch, DirectFetchLoop, DirectFetchStop, EnableGetBattleReport, DisableGetBattleReport, SetScrollMode, CheckAdb, GetMyUnionName } from '../../wailsjs/go/main/App'
+import { GetBattleReports, ExportAllBattleReports, StartAutoScroll, StopAutoScroll, EnableCaptureRequests, DisableCaptureRequests, TestDirectFetch, DirectFetchLoop, DirectFetchStop, EnableGetBattleReport, DisableGetBattleReport, CheckAdb, GetMyUnionName } from '../../wailsjs/go/main/App'
 import { Search, Swords, Download, Play, Square, Timer, RefreshCw, HelpCircle, ChevronUp, ChevronDown } from 'lucide-vue-next'
 import { formatTimestamp } from '@/utils/format'
 import { storeToRefs } from 'pinia'
@@ -13,7 +13,7 @@ const nmessage = useMessage()
 const scrollStore = useAutoScrollStore()
 scrollStore.ensureListeners()
 const {
-    isScrolling, isDetecting, showGuide, guideCountdown, guidePos,
+    isScrolling,
     scrollProgress, scrollLatestTime, scrollReportCount, scrollCount, scrollProgressPct,
     directRunning, directProgress, directResult
 } = storeToRefs(scrollStore)
@@ -165,28 +165,16 @@ const startScroll = () => {
     scrollLatestTime.value = 0
     scrollReportCount.value = 0
     scrollProgress.value = {}
-    SetScrollMode(scrollMode.value).then(() => {
-        if (scrollMode.value == 'mouse') {
-            showGuide.value = true
-            isDetecting.value = false
-            isScrolling.value = false
-            guideCountdown.value = 5
-        }
-        return StartAutoScroll(targetTs, intervalMs)
-    }).then(v => {
+    StartAutoScroll(targetTs, intervalMs).then(v => {
         let resp = JSON.parse(v)
         if (resp.code != 200) {
             nmessage.error(resp.msg)
-            showGuide.value = false
         }
     }).catch(e => {
         nmessage.error('启动自动翻阅失败: ' + e)
-        showGuide.value = false
     })
 }
 
-// 翻阅模式: mouse=鼠标滚轮 adb=连接模拟器
-const scrollMode = ref('mouse')
 const scrollInterval = ref(600)
 const adbStatus = ref('')
 const adbChecking = ref(false)
@@ -209,8 +197,6 @@ const checkAdb = () => {
 
 const stopScroll = () => {
     scrollStore.isScrolling = false
-    scrollStore.isDetecting = false
-    showGuide.value = false
     scrollPanelCollapsed.value = true
     StopAutoScroll().then(v => {
         nmessage.success('已停止自动翻阅')
@@ -398,12 +384,12 @@ onMounted(() => {
             </n-alert>
 
             <!-- 自动翻阅控制栏 -->
-            <n-alert v-if="!isScrolling && !showGuide" type="info" :bordered="false" style="margin-bottom:16px;">
+            <n-alert v-if="!isScrolling" type="info" :bordered="false" style="margin-bottom:16px;">
                 <template #header>
                     <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;width:100%;">
                         <span style="display:flex;align-items:center;gap:8px;">
                             <Timer :size="16" />
-                            自动翻阅（{{ scrollMode == 'adb' ? 'ADB模拟器模式' : '鼠标模式' }}）
+                            自动翻阅（ADB模拟器模式）
                         </span>
                         <n-button text size="small" @click="showHelp=true" style="opacity:0.7;">
                             <template #icon><HelpCircle :size="16" /></template>
@@ -412,23 +398,14 @@ onMounted(() => {
                     </div>
                 </template>
                 <div style="display:flex;align-items:center;gap:16px;margin-bottom:10px;flex-wrap:wrap;">
-                    <n-radio-group v-model:value="scrollMode" size="small">
-                        <n-radio-button value="mouse">鼠标模式</n-radio-button>
-                        <n-radio-button value="adb">ADB模式（连接模拟器）</n-radio-button>
-                    </n-radio-group>
-                    <template v-if="scrollMode == 'adb'">
-                        <n-button size="small" :loading="adbChecking" @click="checkAdb">
-                            <template #icon><Search :size="14" /></template>
-                            检测设备
-                        </n-button>
-                        <n-tag v-if="adbStatus" :type="adbConnected ? 'success' : 'error'" size="small">{{ adbStatus }}</n-tag>
-                    </template>
+                    <n-button size="small" :loading="adbChecking" @click="checkAdb">
+                        <template #icon><Search :size="14" /></template>
+                        检测设备
+                    </n-button>
+                    <n-tag v-if="adbStatus" :type="adbConnected ? 'success' : 'error'" size="small">{{ adbStatus }}</n-tag>
                 </div>
-                <div v-if="scrollMode == 'mouse'" style="font-size:13px;margin-bottom:10px;">
-                    程序将在屏幕中央显示一个<b>白色引导框</b>，请将<b>模拟器窗口移到框内</b>。5秒后鼠标会自动移到框内滚轮翻页。
-                </div>
-                <div v-else style="font-size:13px;margin-bottom:10px;">
-                    通过 <b>adb 连接模拟器</b>（雷电/MuMu/夜神等）自动滑动翻阅，战报识别与截止时间判断与鼠标模式完全一致（基于抓包数据），无需占用鼠标，可后台运行。
+                <div style="font-size:13px;margin-bottom:10px;">
+                    通过 <b>adb 连接模拟器</b>（雷电/MuMu/夜神等）自动滑动翻阅，战报识别与截止时间判断基于抓包数据，无需占用鼠标，可后台运行。
                 </div>
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                     <n-date-picker v-model:value="scrollTargetTime" type="datetime"
@@ -443,23 +420,6 @@ onMounted(() => {
                     </n-button>
                 </div>
             </n-alert>
-
-            <!-- 引导框 + 倒计时 -->
-            <div v-if="showGuide" class="guide-overlay">
-                <div class="guide-box" :style="{
-                    left: guidePos.centerX - guidePos.width/2 + 'px',
-                    top: guidePos.centerY - guidePos.height/2 + 'px',
-                    width: guidePos.width + 'px',
-                    height: guidePos.height + 'px',
-                }">
-                    <div class="guide-label">
-                        <Timer :size="20" />
-                        <span>将模拟器窗口移到此框内</span>
-                        <div class="guide-countdown">{{ guideCountdown }}s</div>
-                    </div>
-                    <div class="guide-sub">屏幕中央 1280x720 区域</div>
-                </div>
-            </div>
 
             <!-- 自动翻阅中（可折叠） -->
             <n-alert v-if="isScrolling" type="warning" :bordered="false" style="margin-bottom:16px;">
@@ -504,7 +464,7 @@ onMounted(() => {
             </n-alert>
 
             <!-- 请求分析（方案B） -->
-            <n-alert v-if="!isScrolling && !showGuide" type="info" :bordered="false" style="margin-bottom:16px;">
+            <n-alert v-if="!isScrolling" type="info" :bordered="false" style="margin-bottom:16px;">
                 <template #header>
                     <div style="display:flex;align-items:center;gap:8px;justify-content:space-between;width:100%;">
                         <span style="display:flex;align-items:center;gap:8px;">
@@ -641,35 +601,23 @@ onMounted(() => {
         style="max-width:640px" :bordered="false" to="body">
         <div style="font-size:14px;line-height:1.8;">
             <h4 style="margin:0 0 8px;">功能介绍</h4>
-            <p><strong>鼠标模式</strong>：屏幕中央显示 1280x720 白色引导框，将模拟器窗口移到框内，5秒后鼠标自动滚轮翻页，同时抓取战报数据入库。</p>
-            <p><strong>ADB模式</strong>：通过 adb 连接模拟器（雷电/MuMu/夜神等，自动探测），程序直接向模拟器注入滑动翻页，战报识别、截止时间与到底判断均与鼠标模式相同（基于抓包数据），无需占用鼠标，可后台运行。</p>
+            <p><strong>ADB模式</strong>：通过 adb 连接模拟器（雷电/MuMu/夜神等，自动探测），程序直接向模拟器注入滑动翻页，战报识别、截止时间与到底判断均基于抓包数据，无需占用鼠标，可后台运行。</p>
 
-            <h4 style="margin:16px 0 8px;">鼠标模式操作步骤</h4>
+            <h4 style="margin:16px 0 8px;">操作步骤</h4>
             <ol style="padding-left:20px;margin:0;">
-                <li>启动模拟器，打开率土之滨，进入游戏</li>
-                <li>在游戏内打开 <strong>同盟战报</strong> 页面（确保战报列表已加载出来）</li>
+                <li>启动模拟器，打开率土之滨，进入游戏并打开 <strong>同盟战报</strong> 页面（确保战报列表已加载出来）</li>
+                <li>点 <strong>"检测设备"</strong> 确认已连接（自动匹配雷电 5555 / MuMu 16384 / 夜神 62001 等端口）</li>
                 <li>选择一个截止时间（可选），如要翻到 <strong>7月11日12:00 之前</strong> 的战报，就选 <code>2026-07-11 12:00</code></li>
-                <li>点击 <strong>"开始翻阅"</strong> 按钮</li>
-                <li>屏幕中央出现白色引导框，将 <strong>模拟器窗口拖到框内</strong></li>
-                <li>5秒倒计时结束后鼠标自动滚轮翻页</li>
-                <li>翻阅到截止时间后自动停止，或点 <strong>"停止翻阅"</strong> 手动结束</li>
-            </ol>
-
-            <h4 style="margin:16px 0 8px;">ADB模式操作步骤</h4>
-            <ol style="padding-left:20px;margin:0;">
-                <li>启动模拟器，打开率土之滨，进入游戏并打开 <strong>同盟战报</strong> 页面</li>
-                <li>选择 <strong>ADB模式</strong>，点 <strong>"检测设备"</strong> 确认已连接（自动匹配雷电 5555 / MuMu 16384 / 夜神 62001 等端口）</li>
-                <li>选择截止时间，点 <strong>"开始翻阅"</strong>，程序向模拟器注入滑动自动翻页，无需操作鼠标</li>
-                <li>翻阅到截止时间或到底部自动停止，可随时点 <strong>"停止翻阅"</strong></li>
+                <li>点击 <strong>"开始翻阅"</strong>，程序向模拟器注入滑动自动翻页，无需操作鼠标</li>
+                <li>翻阅到截止时间或到底后自动停止，可随时点 <strong>"停止翻阅"</strong> 手动结束</li>
             </ol>
 
             <h4 style="margin:16px 0 8px;">注意事项</h4>
             <ul style="padding-left:20px;margin:0;">
-                <li>鼠标模式建议将模拟器窗口设为 1280x720 分辨率，翻页过程中请勿动鼠标或键盘</li>
                 <li>ADB模式无法连接模拟器时，请先在模拟器设置中开启 adb 调试（雷电/夜神默认已开）</li>
                 <li>翻阅速度约 0.9 秒/次，1000 页约 15 分钟</li>
                 <li>连续多次无新战报自动停止</li>
-                <li>鼠标模式新战报自动入库并刷新列表</li>
+                <li>新战报自动入库并刷新列表</li>
             </ul>
         </div>
         <template #footer>
@@ -829,56 +777,6 @@ onMounted(() => {
     display: flex;
     justify-content: center;
     margin-top: 20px;
-}
-
-@keyframes pulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.4; }
-}
-
-.guide-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0,0,0,0.3);
-    z-index: 9999;
-    pointer-events: none;
-}
-
-.guide-box {
-    position: absolute;
-    border: 3px dashed rgba(255,255,255,0.8);
-    border-radius: 8px;
-    background: rgba(255,255,255,0.08);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-}
-
-.guide-label {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: #fff;
-    font-size: 18px;
-    font-weight: 600;
-    text-shadow: 0 2px 8px rgba(0,0,0,0.6);
-}
-
-.guide-countdown {
-    font-size: 24px;
-    font-weight: 700;
-    color: #f0ad4e;
-}
-
-.guide-sub {
-    color: rgba(255,255,255,0.7);
-    font-size: 13px;
-    margin-top: 8px;
-    text-shadow: 0 1px 4px rgba(0,0,0,0.6);
 }
 
 .req-body {

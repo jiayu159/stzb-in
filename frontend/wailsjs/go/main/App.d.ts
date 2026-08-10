@@ -73,8 +73,6 @@ export function GetPlayerTeam(arg1:string,arg2:string,arg3:number,arg4:number):P
 
 export function GetReportNumByTaskId(arg1:number):Promise<string>;
 
-export function GetScrollMode():Promise<string>;
-
 export function GetTask(arg1:number):Promise<string>;
 
 export function GetTaskList():Promise<string>;
@@ -96,8 +94,6 @@ export function Greet(arg1:string):Promise<string>;
 export function SelectDb(arg1:string):Promise<string>;
 
 export function SetAiThinking(arg1:boolean):Promise<string>;
-
-export function SetScrollMode(arg1:string):Promise<string>;
 
 export function StartAutoScroll(arg1:number,arg2:number):Promise<string>;
 

@@ -146,10 +146,6 @@ export function GetReportNumByTaskId(arg1) {
   return window['go']['main']['App']['GetReportNumByTaskId'](arg1);
 }
 
-export function GetScrollMode() {
-  return window['go']['main']['App']['GetScrollMode']();
-}
-
 export function GetTask(arg1) {
   return window['go']['main']['App']['GetTask'](arg1);
 }
@@ -192,10 +188,6 @@ export function SelectDb(arg1) {
 
 export function SetAiThinking(arg1) {
   return window['go']['main']['App']['SetAiThinking'](arg1);
-}
-
-export function SetScrollMode(arg1) {
-  return window['go']['main']['App']['SetScrollMode'](arg1);
 }
 
 export function StartAutoScroll(arg1, arg2) {

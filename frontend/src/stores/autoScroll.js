@@ -5,9 +5,6 @@ export const useAutoScrollStore = defineStore('autoScroll', {
     state: () => ({
         isScrolling: false,
         isDetecting: false,
-        showGuide: false,
-        guideCountdown: 5,
-        guidePos: { centerX: 0, centerY: 0, width: 1280, height: 720 },
         scrollProgress: {},
         scrollLatestTime: 0,
         scrollReportCount: 0,
@@ -23,15 +20,7 @@ export const useAutoScrollStore = defineStore('autoScroll', {
         ensureListeners() {
             if (this.listenersReady) return
             this.listenersReady = true
-            EventsOn('autoScrollGuide', (data) => {
-                this.showGuide = true
-                this.guidePos = data
-                this.guideCountdown = 5
-                this.isDetecting = false
-                this.isScrolling = false
-            })
             EventsOn('autoScrollStarted', () => {
-                this.showGuide = false
                 this.isDetecting = false
                 this.isScrolling = true
             })
@@ -47,13 +36,11 @@ export const useAutoScrollStore = defineStore('autoScroll', {
             EventsOn('autoScrollStopped', (data) => {
                 this.isScrolling = false
                 this.isDetecting = false
-                this.showGuide = false
                 this.lastStop = { reason: data.reason || '', scrolls: data.scrolls || 0 }
             })
             EventsOn('autoScrollError', () => {
                 this.isScrolling = false
                 this.isDetecting = false
-                this.showGuide = false
             })
             EventsOn('directFetchProgress', (data) => {
                 this.directRunning = true

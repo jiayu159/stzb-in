@@ -267,31 +267,12 @@ func (a *App) DisableGetBattleReport() string {
 	return global.Response{Message: "关闭获取详细战报成功"}.Success()
 }
 
-// StartAutoScroll 开启自动翻阅（targetTime为Unix秒戳截止时间，0=不限；intervalMs为翻页间隔毫秒）
-// 模式由 SetScrollMode 决定：mouse=鼠标滚轮 adb=连接模拟器
+// StartAutoScroll 开启模拟器(adb)自动翻阅（targetTime为Unix秒戳截止时间，0=不限；intervalMs为翻页间隔毫秒）
 func (a *App) StartAutoScroll(targetTime int64, intervalMs int64) string {
 	global.ExVar.NeedGetBattleData = true
 	global.ExVar.NeedGetReport = false
-	if global.ExVar.ScrollMode == "adb" {
-		go StartAdbScroll(targetTime, intervalMs)
-		return global.Response{Message: "已开启模拟器自动翻阅"}.Success()
-	}
-	go StartMouseScroll(targetTime)
-	return global.Response{Message: "已开启自动翻阅"}.Success()
-}
-
-// SetScrollMode 设置自动翻阅模式：mouse/adb
-func (a *App) SetScrollMode(mode string) string {
-	if mode != "mouse" && mode != "adb" {
-		return global.Response{Message: "无效的翻阅模式"}.Error()
-	}
-	global.ExVar.ScrollMode = mode
-	return global.Response{Message: "已切换翻阅模式"}.Success()
-}
-
-// GetScrollMode 获取当前自动翻阅模式
-func (a *App) GetScrollMode() string {
-	return global.ExVar.ScrollMode
+	go StartAdbScroll(targetTime, intervalMs)
+	return global.Response{Message: "已开启模拟器自动翻阅"}.Success()
 }
 
 // CheckAdb 检测 adb 与模拟器连接状态
