@@ -15,6 +15,7 @@ import Activity from './pages/MemberActivity.vue';
 import HotRank from './pages/HotRank.vue';
 import TeamCounter from './pages/TeamCounter.vue';
 import TeamWinRate from './pages/TeamWinRate.vue';
+import LongShiHelper from './pages/LongShiHelper.vue';
 import { CheckNpcap } from '../wailsjs/go/main/App';
 
 const routes = [
@@ -113,6 +114,12 @@ const routes = [
         name: 'teamcounter',
         component: TeamCounter,
         meta: { title: '队伍克制' }
+    },
+    {
+        path: '/longshi',
+        name: 'longshi',
+        component: LongShiHelper,
+        meta: { title: '长史助手' }
     }
 ]
 

@@ -102,14 +102,9 @@ func stripBOM(b []byte) []byte {
 }
 
 func fetchDebug(format string, args ...interface{}) {
-	fetchDebugMu.Lock()
-	defer fetchDebugMu.Unlock()
-	f, err := os.OpenFile("fetch_debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	f.WriteString(time.Now().Format("15:04:05.000") + " " + fmt.Sprintf(format, args...) + "\n")
+	// 调试日志已关闭
+	_ = format
+	_ = args
 }
 
 type fetchCache struct {

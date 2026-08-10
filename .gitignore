@@ -1,14 +1,20 @@
-.idea
+# 构建产物
+build/
+frontend/dist/
+
+# 依赖
+node_modules/
+
+# 数据库文件
 *.db
-*.exe
-.vscode
-*.bak
-dist
-dist1
-*.zip
-.claude
-build/bin
-node_modules
-frontend/dist
-changelog.md
-fullchangelog.md
+*.db-shm
+*.db-wal
+
+# 运行缓存与日志
+directfetch_cache.json
+fetch_debug.log
+*.log
+
+# 系统文件
+Thumbs.db
+.DS_Store

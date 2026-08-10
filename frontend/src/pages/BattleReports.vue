@@ -1,13 +1,22 @@
 <script setup>
-import { ref, onMounted, onUnmounted, computed } from 'vue'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { NCard, NButton, NInput, NInputNumber, NEmpty, NSpin, NTag, NPagination, NSpace, NAlert, NDatePicker, NProgress, NStatistic, NModal, NCountdown, NCollapse, NCollapseItem, NRadioGroup, NRadioButton, NSelect, useMessage } from 'naive-ui'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { GetBattleReports, ExportAllBattleReports, StartAutoScroll, StopAutoScroll, EnableCaptureRequests, DisableCaptureRequests, TestDirectFetch, DirectFetchLoop, DirectFetchStop, EnableGetBattleReport, DisableGetBattleReport, SetScrollMode, CheckAdb, GetMyUnionName } from '../../wailsjs/go/main/App'
 import { Search, Swords, Download, Play, Square, Timer, RefreshCw, HelpCircle, ChevronUp, ChevronDown } from 'lucide-vue-next'
 import { formatTimestamp } from '@/utils/format'
+import { storeToRefs } from 'pinia'
+import { useAutoScrollStore } from '../stores/autoScroll'
 import * as XLSX from 'xlsx'
 
 const nmessage = useMessage()
+const scrollStore = useAutoScrollStore()
+scrollStore.ensureListeners()
+const {
+    isScrolling, isDetecting, showGuide, guideCountdown, guidePos,
+    scrollProgress, scrollLatestTime, scrollReportCount, scrollCount, scrollProgressPct,
+    directRunning, directProgress, directResult
+} = storeToRefs(scrollStore)
 const loading = ref(false)
 const reports = ref([])
 const total = ref(0)
@@ -29,23 +38,12 @@ const myUnion = ref('')
 const hasSearched = ref(false)
 const showHelp = ref(false)
 
-// 自动翻阅
-const isScrolling = ref(false)
-const isDetecting = ref(false)
-const showGuide = ref(false)
-const guideCountdown = ref(5)
+// 自动翻阅（全局状态，切换页面不中断）
 const scrollTargetTime = ref(null)
-const scrollProgress = ref({})
-const scrollLatestTime = ref(0)
-const scrollReportCount = ref(0)
-const scrollCount = ref(0)
-const scrollPanelCollapsed = ref(true)
-const guidePos = ref({ centerX: 0, centerY: 0, width: 1280, height: 720 })
 
 // 请求分析（方案B：逆向客户端->服务器请求）
 const capturing = ref(false)
 const capturedRequests = ref([])
-let unlistenClientReq = null
 
 const toggleCapture = () => {
     if (capturing.value) {
@@ -98,12 +96,7 @@ const onDisableGetBattleReport = () => {
     })
 }
 
-// 直连重放（免翻页拉取）
-const directRunning = ref(false)
-const directResult = ref('')
-const directProgress = ref({})
-let unlistenDirect = {}
-
+// 直连重放（免翻页拉取，状态全局化）
 const testDirect = () => {
     directResult.value = '测试中...'
     TestDirectFetch().then(v => {
@@ -215,8 +208,8 @@ const checkAdb = () => {
 }
 
 const stopScroll = () => {
-    isScrolling.value = false
-    isDetecting.value = false
+    scrollStore.isScrolling = false
+    scrollStore.isDetecting = false
     showGuide.value = false
     scrollPanelCollapsed.value = true
     StopAutoScroll().then(v => {
@@ -227,20 +220,16 @@ const stopScroll = () => {
     })
 }
 
-const scrollProgressPct = ref(0)
+const scrollPanelCollapsed = ref(true)
+
+let unlistenClientReq = null
+
 const scrollDetailOpen = ref(false)
 
 const formatScrollTime = (ts) => {
     if (!ts || ts <= 0) return '--'
     return new Date(ts * 1000).toLocaleString()
 }
-
-let unlistenProgress = null
-let unlistenStopped = null
-let unlistenError = null
-let unlistenWarning = null
-let unlistenDetecting = null
-let unlistenStarted = null
 
 onMounted(() => {
     doSearch(1)
@@ -255,87 +244,38 @@ onMounted(() => {
             }
         }).catch(() => {})
     }
-    unlistenDetecting = EventsOn('autoScrollGuide', (data) => {
-        showGuide.value = true
-        guidePos.value = data
-        guideCountdown.value = 5
-        isDetecting.value = false
-        isScrolling.value = false
-    })
-    unlistenStarted = EventsOn('autoScrollStarted', (data) => {
-        showGuide.value = false
-        isDetecting.value = false
-        isScrolling.value = true
-    })
-    unlistenProgress = EventsOn('autoScrollProgress', (data) => {
-        scrollProgress.value = data
-        scrollReportCount.value = data.reportCount || 0
-        scrollCount.value = data.scrolls || scrollCount.value
-        scrollProgressPct.value = data.percent || 0
-        if (data.latestTime && data.latestTime > scrollLatestTime.value) {
-            scrollLatestTime.value = data.latestTime
-        }
-        if (isScrolling.value) {
-            doSearch(1)
-        }
-    })
-    unlistenStopped = EventsOn('autoScrollStopped', (data) => {
-        isScrolling.value = false
-        isDetecting.value = false
-        const reasonMap = {
-            timeReached: '已翻阅到截止时间',
-            noMoreData: '已翻阅到底部，没有更多战报',
-            userCancel: '用户手动停止'
-        }
-        const reason = reasonMap[data.reason] || data.reason
-        nmessage.success(`自动翻阅已停止(${reason})，共翻页 ${data.scrolls || 0} 次`)
-        doSearch(1)
-    })
-    unlistenWarning = EventsOn('autoScrollWarning', (msg) => {
-        nmessage.warning(msg)
-    })
-    unlistenError = EventsOn('autoScrollError', (msg) => {
-        isScrolling.value = false
-        isDetecting.value = false
-        nmessage.error(msg)
-    })
     unlistenClientReq = EventsOn('clientRequest', (data) => {
         if (!capturing.value) return
         capturedRequests.value.unshift(data)
         if (capturedRequests.value.length > 200) capturedRequests.value.length = 200
     })
-    unlistenDirect.progress = EventsOn('directFetchProgress', (data) => {
-        directProgress.value = data
-        directRunning.value = true
-    })
-    unlistenDirect.done = EventsOn('directFetchDone', (data) => {
-        directRunning.value = false
-        const reasonMap = { timeReached: '已拉取到截止时间', noMoreData: '已到底，没有更多战报' }
-        nmessage.success(`免翻页拉取完成(${reasonMap[data.reason] || data.reason})，累计 ${data.reportCount || 0} 条`)
-        doSearch(1)
-    })
-    unlistenDirect.error = EventsOn('directFetchError', (data) => {
-        directRunning.value = false
-        nmessage.error('拉取出错: ' + (data.msg || ''))
-    })
-    unlistenDirect.stopped = EventsOn('directFetchStopped', (data) => {
-        directRunning.value = false
-        nmessage.warning(`手动停止，累计 ${data.reportCount || 0} 条`)
-    })
 })
 
 onUnmounted(() => {
-    if (unlistenDetecting) EventsOff('autoScrollDetecting')
-    if (unlistenStarted) EventsOff('autoScrollStarted')
-    if (unlistenProgress) EventsOff('autoScrollProgress')
-    if (unlistenStopped) EventsOff('autoScrollStopped')
-    if (unlistenWarning) EventsOff('autoScrollWarning')
-    if (unlistenError) EventsOff('autoScrollError')
     if (unlistenClientReq) EventsOff('clientRequest')
-    Object.values(unlistenDirect).forEach(u => { if (u) EventsOff('directFetchProgress'); EventsOff('directFetchDone'); EventsOff('directFetchError'); EventsOff('directFetchStopped') })
     if (capturing.value) DisableCaptureRequests()
-    if (directRunning.value) DirectFetchStop()
-    if (isScrolling.value || isDetecting.value) StopAutoScroll()
+})
+
+// 自动翻阅/直连拉取结束（全局状态）时刷新列表并提示
+watch(() => scrollStore.lastStop, (s) => {
+    if (!s) return
+    if (s.mode === 'direct') {
+        const reasonMap = { timeReached: '已拉取到截止时间', noMoreData: '已到底，没有更多战报' }
+        nmessage.success('免翻页拉取完成(' + (reasonMap[s.reason] || s.reason) + ')，累计 ' + (s.reportCount || 0) + ' 条')
+    } else {
+        const reasonMap = {
+            timeReached: '已翻阅到截止时间',
+            noMoreData: '已翻阅到底部，没有更多战报',
+            userCancel: '用户手动停止'
+        }
+        nmessage.success('自动翻阅已停止(' + (reasonMap[s.reason] || s.reason) + ')，共翻页 ' + (s.scrolls || 0) + ' 次')
+    }
+    doSearch(1)
+})
+
+// 翻阅推进时实时刷新战报列表
+watch(scrollProgress, () => {
+    if (isScrolling.value) doSearch(1)
 })
 
 const resultMap = {

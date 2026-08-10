@@ -1,17 +1,42 @@
 <script setup>
 import { h, computed } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { NMessageProvider, NDialogProvider, NConfigProvider, NLayout, NLayoutSider, NLayoutContent, NMenu, NIcon, NButton } from 'naive-ui'
+import { NMessageProvider, NDialogProvider, NConfigProvider, NLayout, NLayoutSider, NLayoutContent, NMenu, NIcon, NButton, NProgress } from 'naive-ui'
 import { zhCN, dateZhCN, darkTheme } from 'naive-ui'
-import { Home, Users, ClipboardList, Swords, UserRoundSearch, ScrollText, Bug, Moon, Sun, BookOpen, BarChart3, FileText, Activity, Trophy, Shield, Crosshair } from 'lucide-vue-next'
+import { Home, Users, ClipboardList, Swords, UserRoundSearch, ScrollText, Bug, Moon, Sun, BookOpen, BarChart3, FileText, Activity, Trophy, Shield, Crosshair, Bot, RefreshCw, Square } from 'lucide-vue-next'
+import { storeToRefs } from 'pinia'
 
 import { useThemeStore } from './stores/theme'
+import { useAutoScrollStore } from './stores/autoScroll'
+import { StopAutoScroll, DirectFetchStop } from '../wailsjs/go/main/App'
 
 import TitleBar from './components/TitleBar.vue'
 
 const route = useRoute()
 const router = useRouter()
 const themeStore = useThemeStore()
+const scrollStore = useAutoScrollStore()
+scrollStore.ensureListeners()
+const { isScrolling, directRunning, scrollProgressPct, scrollReportCount } = storeToRefs(scrollStore)
+
+const isRunning = computed(() => isScrolling.value || directRunning.value)
+const taskLabel = computed(() => {
+    if (directRunning.value) return '免翻页拉取中 (' + (scrollReportCount.value || 0) + ' 条)'
+    if (isScrolling.value) return '自动翻阅中'
+    return ''
+})
+
+const stopRunningTask = () => {
+    if (isScrolling.value) {
+        scrollStore.isScrolling = false
+        scrollStore.isDetecting = false
+        StopAutoScroll()
+    }
+    if (directRunning.value) {
+        scrollStore.directRunning = false
+        DirectFetchStop()
+    }
+}
 
 const activeKey = computed(() => {
     const path = route.path
@@ -30,6 +55,11 @@ const menuOptions = [
         label: '控制面板',
         key: 'index',
         icon: renderIcon(Home)
+    },
+    {
+        label: '长史助手',
+        key: 'longshi',
+        icon: renderIcon(Bot)
     },
     {
         label: '同盟成员',
@@ -154,6 +184,20 @@ const themeOverrides = computed(() => ({
                                 :options="menuOptions"
                                 @update:value="handleMenuUpdate"
                             />
+                            <div v-if="isRunning" class="sidebar-task">
+                                <div class="sidebar-task-title">
+                                    <RefreshCw :size="12" class="task-spin" style="vertical-align:-2px;" />
+                                    {{ taskLabel }}
+                                </div>
+                                <n-progress v-if="isScrolling" :percentage="scrollProgressPct" :height="4" :show-indicator="false" />
+                                <div style="display:flex;align-items:center;gap:6px;margin-top:6px;">
+                                    <n-tag size="tiny" type="success" :bordered="false">后台运行不中断</n-tag>
+                                    <n-button size="tiny" type="error" quaternary @click="stopRunningTask">
+                                        <template #icon><Square :size="12" /></template>
+                                        停止
+                                    </n-button>
+                                </div>
+                            </div>
                             <div class="sidebar-bottom">
                                 <n-button quaternary circle size="small" @click="themeStore.toggle" :title="themeStore.isDark ? '切换浅色模式' : '切换深色模式'">
                                     <template #icon>
@@ -210,6 +254,29 @@ const themeOverrides = computed(() => ({
     display: flex;
     align-items: center;
     justify-content: flex-end;
+}
+
+.sidebar-task {
+    margin: 8px 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: rgba(24, 160, 88, 0.1);
+    border: 1px solid rgba(24, 160, 88, 0.25);
+}
+
+.sidebar-task-title {
+    font-size: 12px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    color: var(--color-text);
+}
+
+.task-spin {
+    animation: taskSpin 1s linear infinite;
+}
+
+@keyframes taskSpin {
+    to { transform: rotate(360deg); }
 }
 
 .main-content {
