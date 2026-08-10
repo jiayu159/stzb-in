@@ -1,5 +1,7 @@
 # 构建产物
 build/
+!build/bin/
+!build/bin/stzbHelper-wails.exe
 frontend/dist/
 
 # 依赖
