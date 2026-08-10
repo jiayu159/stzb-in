@@ -14,6 +14,7 @@ node_modules/
 
 # 运行缓存与日志
 directfetch_cache.json
+EXPERIMENTS.md
 fetch_debug.log
 *.log
 
