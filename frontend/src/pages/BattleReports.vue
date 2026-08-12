@@ -1,9 +1,9 @@
 <script setup>
-import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
-import { NCard, NButton, NInput, NInputNumber, NEmpty, NSpin, NTag, NPagination, NSpace, NAlert, NDatePicker, NProgress, NStatistic, NModal, NCollapse, NCollapseItem, NSelect, useMessage } from 'naive-ui'
+import { ref, onMounted, onUnmounted, watch, computed, h } from 'vue'
+import { NCard, NButton, NInput, NInputNumber, NEmpty, NSpin, NTag, NPagination, NSpace, NAlert, NDatePicker, NProgress, NStatistic, NModal, NCollapse, NCollapseItem, NSelect, NDataTable, useMessage } from 'naive-ui'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import { GetBattleReports, ExportAllBattleReports, StartAutoScroll, StopAutoScroll, EnableCaptureRequests, DisableCaptureRequests, TestDirectFetch, DirectFetchLoop, DirectFetchStop, EnableGetBattleReport, DisableGetBattleReport, CheckAdb, GetMyUnionName } from '../../wailsjs/go/main/App'
-import { Search, Swords, Download, Play, Square, Timer, RefreshCw, HelpCircle, ChevronUp, ChevronDown } from 'lucide-vue-next'
+import { Search, Download, Play, Square, Timer, RefreshCw, HelpCircle, ChevronUp, ChevronDown } from 'lucide-vue-next'
 import { formatTimestamp } from '@/utils/format'
 import { storeToRefs } from 'pinia'
 import { useAutoScrollStore } from '../stores/autoScroll'
@@ -21,7 +21,7 @@ const loading = ref(false)
 const reports = ref([])
 const total = ref(0)
 const page = ref(1)
-const pageSize = ref(50)
+const pageSize = ref(10)
 
 const searchName = ref('')
 const minHp = ref(0)
@@ -70,10 +70,13 @@ const clearCapture = () => {
 }
 
 // 获取详细战报开关（由控制面板迁移至此）
+const battleReportEnabled = ref(false)
+
 const onEnableGetBattleReport = () => {
     EnableGetBattleReport().then(v => {
         let data = JSON.parse(v)
         if (data.code == 200) {
+            battleReportEnabled.value = true
             nmessage.success('开启成功')
         } else {
             nmessage.error(data.msg)
@@ -87,6 +90,7 @@ const onDisableGetBattleReport = () => {
     DisableGetBattleReport().then(v => {
         let data = JSON.parse(v)
         if (data.code == 200) {
+            battleReportEnabled.value = false
             nmessage.success('关闭成功')
         } else {
             nmessage.error(data.msg)
@@ -301,6 +305,25 @@ const formatHp = (hp) => {
     return String(hp)
 }
 
+const reportColumns = [
+    { title: '时间', key: 'time', width: 165, render: (row) => formatTimestamp(row.time) },
+    { title: '地点', key: 'wid_name', minWidth: 110 },
+    { title: '进攻方', key: 'attack_name', minWidth: 110 },
+    { title: '进攻方同盟', key: 'attack_union_name', minWidth: 110 },
+    { title: '防守方', key: 'defend_name', minWidth: 110 },
+    { title: '防守方同盟', key: 'defend_union_name', minWidth: 110 },
+    { title: '攻方兵力', key: 'attack_hp', width: 90, render: (row) => formatHp(row.attack_hp) },
+    { title: '守方兵力', key: 'defend_hp', width: 90, render: (row) => formatHp(row.defend_hp) },
+    { title: '类型', key: 'garrison', width: 70, render: (row) => row.garrison === 1 ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '拆迁' }) : h(NTag, { size: 'small', type: 'default', bordered: false }, { default: () => '主力' }) },
+    {
+        title: '结果', key: 'result', width: 90,
+        render: (row) => {
+            const r = getResult(row.result, 'attack')
+            return h(NTag, { size: 'small', type: r.type, bordered: false }, { default: () => r.label })
+        }
+    },
+]
+
 const exportExcel = () => {
     ExportAllBattleReports().then(v => {
         let resp = JSON.parse(v)
@@ -378,8 +401,8 @@ onMounted(() => {
                     用于查询队伍功能拉取战报使用，开启时无法获取攻城战报
                 </div>
                 <div style="display:flex;align-items:center;gap:12px;">
-                    <n-button type="primary" @click="onEnableGetBattleReport">开启</n-button>
-                    <n-button @click="onDisableGetBattleReport">关闭</n-button>
+                    <n-button :type="battleReportEnabled ? 'primary' : 'default'" @click="onEnableGetBattleReport">开启</n-button>
+                    <n-button :type="!battleReportEnabled ? 'primary' : 'default'" @click="onDisableGetBattleReport">关闭</n-button>
                 </div>
             </n-alert>
 
@@ -548,41 +571,14 @@ onMounted(() => {
 
             <n-spin :show="loading">
                 <n-empty v-if="!loading && hasSearched && reports.length === 0" description="暂无战斗记录" />
-                <div v-else-if="reports.length > 0" class="report-list">
-                    <div v-for="r in reports" :key="r.id" class="report-card">
-                        <div class="report-header">
-                            <span class="report-time">{{ formatTimestamp(r.time) }}</span>
-                            <span class="report-location">
-                                <Swords :size="14" />
-                                {{ r.wid_name || '未知地点' }}
-                            </span>
-                        </div>
-                        <div class="report-body">
-                            <div class="side attack-side">
-                                <div class="side-label">攻</div>
-                                <div class="side-name">{{ r.attack_name }}</div>
-                                <div class="side-union">{{ r.attack_union_name }}</div>
-                                <div class="side-hp">兵力: {{ formatHp(r.attack_hp) }}</div>
-                                <n-tag :type="getResult(r.result, 'attack').type" size="small">
-                                    {{ getResult(r.result, 'attack').label }}
-                                </n-tag>
-                                <div class="side-settle">武勋: {{ r.attacker_gongxun || 0 }} 武策: {{ r.attacker_xwc || 0 }}</div>
-                            </div>
-                            <div class="vs">VS</div>
-                            <div class="side defend-side">
-                                <div class="side-label">守</div>
-                                <div class="side-name">{{ r.defend_name }}</div>
-                                <div class="side-union">{{ r.defend_union_name }}</div>
-                                <div class="side-hp">兵力: {{ formatHp(r.defend_hp) }}</div>
-                                <n-tag :type="getResult(r.result, 'defend').type" size="small">
-                                    {{ getResult(r.result, 'defend').label }}
-                                </n-tag>
-                                <div class="side-settle">武勋: {{ r.defender_gongxun || 0 }} 武策: {{ r.defender_xwc || 0 }}</div>
-                            </div>
-                            <n-tag v-if="r.garrison === 1" size="small" type="warning" class="garrison-tag">拆迁</n-tag>
-                        </div>
-                    </div>
-                </div>
+                <n-data-table
+                    v-else-if="reports.length > 0"
+                    :columns="reportColumns"
+                    :data="reports"
+                    :bordered="true"
+                    :single-line="false"
+                    :max-height="560"
+                />
             </n-spin>
 
             <div v-if="total > pageSize" class="pagination-wrap">
@@ -592,6 +588,7 @@ onMounted(() => {
                     :item-count="total"
                     @update:page="doSearch"
                 />
+                <span class="page-limit-tip">最多显示最近 50 封</span>
             </div>
         </n-card>
     </div>
@@ -675,108 +672,17 @@ onMounted(() => {
     opacity: 0.8;
 }
 
-.report-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.report-card {
-    border: 1px solid var(--border-color, #e5e5e5);
-    border-radius: 10px;
-    padding: 16px;
-    transition: box-shadow 0.2s;
-}
-
-.report-card:hover {
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-}
-
-.report-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    margin-bottom: 12px;
-    font-size: 12px;
-    opacity: 0.6;
-}
-
-.report-location {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.report-body {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 24px;
-}
-
-.side {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 4px;
-    text-align: center;
-}
-
-.side-label {
-    font-size: 11px;
-    font-weight: 700;
-    padding: 2px 10px;
-    border-radius: 4px;
-    margin-bottom: 4px;
-}
-
-.attack-side .side-label {
-    background: rgba(59, 130, 246, 0.12);
-    color: #3b82f6;
-}
-
-.defend-side .side-label {
-    background: rgba(239, 68, 68, 0.12);
-    color: #ef4444;
-}
-
-.side-name {
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.side-union {
-    font-size: 12px;
-    opacity: 0.6;
-}
-
-.side-hp {
-    font-size: 13px;
-    opacity: 0.7;
-}
-
-.side-settle {
-    font-size: 12px;
-    opacity: 0.65;
-}
-
-.garrison-tag {
-    align-self: flex-start;
-    margin-top: 4px;
-}
-
-.vs {
-    font-size: 13px;
-    font-weight: 700;
-    opacity: 0.3;
-    flex-shrink: 0;
-}
-
 .pagination-wrap {
     display: flex;
     justify-content: center;
+    align-items: center;
+    gap: 12px;
     margin-top: 20px;
+}
+
+.page-limit-tip {
+    font-size: 12px;
+    opacity: 0.6;
 }
 
 .req-body {

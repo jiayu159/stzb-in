@@ -2,7 +2,8 @@
 import { ref, computed, onMounted } from 'vue'
 import { NCard, NButton, NSpace, NTable, NStatistic, NGrid, NGi, NEmpty, useMessage } from 'naive-ui'
 import { GetGroupWu } from '../../wailsjs/go/main/App'
-import { RefreshCw } from 'lucide-vue-next'
+import { RefreshCw, Download } from 'lucide-vue-next'
+import * as XLSX from 'xlsx'
 
 const nmessage = useMessage()
 const groupdata = ref([])
@@ -62,6 +63,23 @@ function getData() {
 onMounted(() => {
     getData()
 })
+
+const exportExcel = () => {
+    if (groupdata.value.length === 0) {
+        nmessage.warning('暂无数据可导出')
+        return
+    }
+    let data = []
+    data.push(['分组名称', '人数', '总武勋', '平均武勋', '0武勋人数'])
+    groupdata.value.forEach(g => {
+        data.push([g.group, g.member_count, g.total_wu, g.average_wu, g.zero_wu_count])
+    })
+    const ws = XLSX.utils.aoa_to_sheet(data)
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, '分组武勋')
+    XLSX.writeFile(wb, `分组武勋_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
+    nmessage.success('导出成功')
+}
 </script>
 
 <template>
@@ -94,6 +112,10 @@ onMounted(() => {
                     <n-button @click="getData" :loading="loading">
                         <template #icon><RefreshCw :size="16" /></template>
                         刷新
+                    </n-button>
+                    <n-button type="primary" @click="exportExcel">
+                        <template #icon><Download :size="16" /></template>
+                        导出表格
                     </n-button>
                 </n-space>
             </div>

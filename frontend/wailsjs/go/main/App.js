@@ -114,6 +114,10 @@ export function GetDbList() {
   return window['go']['main']['App']['GetDbList']();
 }
 
+export function GetDefeatedEnemyTeams(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetDefeatedEnemyTeams'](arg1, arg2, arg3);
+}
+
 export function GetFetchTemplate() {
   return window['go']['main']['App']['GetFetchTemplate']();
 }
@@ -146,6 +150,10 @@ export function GetReportNumByTaskId(arg1) {
   return window['go']['main']['App']['GetReportNumByTaskId'](arg1);
 }
 
+export function GetSiegeSummary() {
+  return window['go']['main']['App']['GetSiegeSummary']();
+}
+
 export function GetTask(arg1) {
   return window['go']['main']['App']['GetTask'](arg1);
 }
@@ -172,6 +180,10 @@ export function GetTeamWinRate(arg1, arg2, arg3, arg4, arg5, arg6) {
 
 export function GetTeamWinRateByTeam(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['GetTeamWinRateByTeam'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function GetUnionMemberTopTeams(arg1, arg2, arg3) {
+  return window['go']['main']['App']['GetUnionMemberTopTeams'](arg1, arg2, arg3);
 }
 
 export function GetVersion() {

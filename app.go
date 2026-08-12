@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"time"
@@ -755,6 +756,291 @@ func (a *App) GetTeamWinRate(name string, uname string, page int, pageSize int, 
 	}}.Success()
 }
 
+// GetUnionMemberTopTeams 查询同盟成员常用队伍：每名成员只统计出现次数最多的一个队伍（武将+战法），一页20条
+func (a *App) GetUnionMemberTopTeams(minHp int, page int, pageSize int) string {
+	type MemberTeam struct {
+		PlayerName   string `json:"player_name"`
+		Hero1Id      int64  `json:"hero1_id"`
+		Hero2Id      int64  `json:"hero2_id"`
+		Hero3Id      int64  `json:"hero3_id"`
+		Hero1Level   int64  `json:"hero1_level"`
+		Hero2Level   int64  `json:"hero2_level"`
+		Hero3Level   int64  `json:"hero3_level"`
+		Hero1Star    int64  `json:"hero1_star"`
+		Hero2Star    int64  `json:"hero2_star"`
+		Hero3Star    int64  `json:"hero3_star"`
+		TotalStar    int64  `json:"total_star"`
+		Hp           int64  `json:"hp"`
+		TeamCount    int64  `json:"team_count"`
+		LastTime     int64  `json:"last_time"`
+		Idu          string `json:"idu"`
+		AllSkillInfo string `json:"all_skill_info"`
+		Role         string `json:"role"`
+		Gear         string `json:"gear"`
+		HeroType     string `json:"hero_type"`
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+
+	baseQuery := `WITH member_rows AS (
+		SELECT
+			attack_name AS player_name,
+			attack_hero1_id AS hero1_id,
+			attack_hero2_id AS hero2_id,
+			attack_hero3_id AS hero3_id,
+			attack_hero1_level AS hero1_level,
+			attack_hero2_level AS hero2_level,
+			attack_hero3_level AS hero3_level,
+			attack_hero1_star AS hero1_star,
+			attack_hero2_star AS hero2_star,
+			attack_hero3_star AS hero3_star,
+			attack_total_star AS total_star,
+			attack_hp AS hp,
+			attacker_gear_info AS gear,
+			attack_hero_type AS hero_type,
+			attack_idu AS idu,
+			time,
+			all_skill_info,
+			battle_id,
+			'attack' AS role
+		FROM battle_report
+		WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
+			AND attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
+			AND attack_hero1_level >= 15 AND attack_hero2_level >= 15 AND attack_hero3_level >= 15
+			AND attack_hp >= ?
+			AND npc = 0 AND all_skill_info != "" AND all_skill_info IS NOT NULL
+		UNION ALL
+		SELECT
+			defend_name AS player_name,
+			defend_hero1_id AS hero1_id,
+			defend_hero2_id AS hero2_id,
+			defend_hero3_id AS hero3_id,
+			defend_hero1_level AS hero1_level,
+			defend_hero2_level AS hero2_level,
+			defend_hero3_level AS hero3_level,
+			defend_hero1_star AS hero1_star,
+			defend_hero2_star AS hero2_star,
+			defend_hero3_star AS hero3_star,
+			defend_total_star AS total_star,
+			defend_hp AS hp,
+			defender_gear_info AS gear,
+			defend_hero_type AS hero_type,
+			defend_idu AS idu,
+			time,
+			all_skill_info,
+			battle_id,
+			'defend' AS role
+		FROM battle_report
+		WHERE defend_name IN (SELECT name FROM team_user WHERE name != '')
+			AND defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
+			AND defend_hero1_level >= 15 AND defend_hero2_level >= 15 AND defend_hero3_level >= 15
+			AND defend_hp >= ?
+			AND npc = 0 AND all_skill_info != "" AND all_skill_info IS NOT NULL
+	),
+	team_counts AS (
+		SELECT
+			player_name, hero1_id, hero2_id, hero3_id, role,
+			COUNT(*) AS team_count,
+			MAX(hp) AS hp,
+			MAX(hero1_level) AS hero1_level,
+			MAX(hero2_level) AS hero2_level,
+			MAX(hero3_level) AS hero3_level,
+			MAX(hero1_star) AS hero1_star,
+			MAX(hero2_star) AS hero2_star,
+			MAX(hero3_star) AS hero3_star,
+			MAX(total_star) AS total_star,
+			SUBSTR(MAX(time || '_' || idu), INSTR(MAX(time || '_' || idu), '_') + 1) AS idu,
+			SUBSTR(MAX(time || '_' || gear), INSTR(MAX(time || '_' || gear), '_') + 1) AS gear,
+			SUBSTR(MAX(time || '_' || hero_type), INSTR(MAX(time || '_' || hero_type), '_') + 1) AS hero_type,
+			SUBSTR(MAX(time || '_' || all_skill_info), INSTR(MAX(time || '_' || all_skill_info), '_') + 1) AS all_skill_info,
+			MAX(time) AS last_time
+		FROM member_rows
+		GROUP BY player_name, hero1_id, hero2_id, hero3_id, role
+	),
+	ranked AS (
+		SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY team_count DESC, last_time DESC) AS rn
+		FROM team_counts
+	)`
+
+	args := []interface{}{minHp, minHp}
+
+	var total int64
+	countQuery := baseQuery + ` SELECT COUNT(*) FROM ranked WHERE rn = 1`
+	if err := model.Conn.Raw(countQuery, args...).Scan(&total).Error; err != nil {
+		return global.Response{Message: "查询失败: " + err.Error()}.Error()
+	}
+
+	offset := (page - 1) * pageSize
+	dataQuery := baseQuery + ` SELECT player_name, hero1_id, hero2_id, hero3_id, hero1_level, hero2_level, hero3_level,
+		hero1_star, hero2_star, hero3_star, total_star, hp, team_count, last_time, idu, all_skill_info, role, gear, hero_type
+		FROM ranked WHERE rn = 1
+		ORDER BY player_name ASC
+		LIMIT ? OFFSET ?`
+
+	var results []MemberTeam
+	if err := model.Conn.Raw(dataQuery, append(args, pageSize, offset)...).Scan(&results).Error; err != nil {
+		return global.Response{Message: "查询失败: " + err.Error()}.Error()
+	}
+
+	log.Printf("查询同盟成员常用队伍: minHp=%d, page=%d, total=%d, 结果: %d条", minHp, page, total, len(results))
+	return global.Response{Data: map[string]interface{}{
+		"list":     results,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
+	}}.Success()
+}
+
+// GetDefeatedEnemyTeams 统计己方同盟战报中战败的非己方同盟人员队伍（武将+战法），按战败次数递减排序，一页20条
+func (a *App) GetDefeatedEnemyTeams(minHp int, page int, pageSize int) string {
+	type EnemyTeam struct {
+		PlayerName   string `json:"player_name"`
+		Hero1Id      int64  `json:"hero1_id"`
+		Hero2Id      int64  `json:"hero2_id"`
+		Hero3Id      int64  `json:"hero3_id"`
+		Hero1Level   int64  `json:"hero1_level"`
+		Hero2Level   int64  `json:"hero2_level"`
+		Hero3Level   int64  `json:"hero3_level"`
+		Hero1Star    int64  `json:"hero1_star"`
+		Hero2Star    int64  `json:"hero2_star"`
+		Hero3Star    int64  `json:"hero3_star"`
+		TotalStar    int64  `json:"total_star"`
+		Hp           int64  `json:"hp"`
+		LossCount    int64  `json:"loss_count"`
+		LastTime     int64  `json:"last_time"`
+		Idu          string `json:"idu"`
+		AllSkillInfo string `json:"all_skill_info"`
+		Role         string `json:"role"`
+		Gear         string `json:"gear"`
+		HeroType     string `json:"hero_type"`
+	}
+
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 200 {
+		pageSize = 20
+	}
+
+	myUnion := a.resolveMyUnion()
+	if myUnion == "" {
+		return global.Response{Message: "未能从战报推断出当前同盟，请先同步同盟成员并在战报列表翻页"}.Error()
+	}
+
+	baseQuery := `WITH enemy_losses AS (
+		SELECT
+			defend_name AS player_name,
+			defend_hero1_id AS hero1_id,
+			defend_hero2_id AS hero2_id,
+			defend_hero3_id AS hero3_id,
+			defend_hero1_level AS hero1_level,
+			defend_hero2_level AS hero2_level,
+			defend_hero3_level AS hero3_level,
+			defend_hero1_star AS hero1_star,
+			defend_hero2_star AS hero2_star,
+			defend_hero3_star AS hero3_star,
+			defend_total_star AS total_star,
+			defend_hp AS hp,
+			defender_gear_info AS gear,
+			defend_hero_type AS hero_type,
+			defend_idu AS idu,
+			time,
+			all_skill_info,
+			battle_id,
+			'defend' AS role
+		FROM battle_report
+		WHERE attack_union_name = ?
+			AND defend_name NOT IN (SELECT name FROM team_user WHERE name != '')
+			AND result IN (1,2,3,4,10,18,19)
+			AND defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
+			AND defend_hero1_level >= 15 AND defend_hero2_level >= 15 AND defend_hero3_level >= 15
+			AND defend_hp >= ?
+			AND npc = 0 AND all_skill_info != "" AND all_skill_info IS NOT NULL
+		UNION ALL
+		SELECT
+			attack_name AS player_name,
+			attack_hero1_id AS hero1_id,
+			attack_hero2_id AS hero2_id,
+			attack_hero3_id AS hero3_id,
+			attack_hero1_level AS hero1_level,
+			attack_hero2_level AS hero2_level,
+			attack_hero3_level AS hero3_level,
+			attack_hero1_star AS hero1_star,
+			attack_hero2_star AS hero2_star,
+			attack_hero3_star AS hero3_star,
+			attack_total_star AS total_star,
+			attack_hp AS hp,
+			attacker_gear_info AS gear,
+			attack_hero_type AS hero_type,
+			attack_idu AS idu,
+			time,
+			all_skill_info,
+			battle_id,
+			'attack' AS role
+		FROM battle_report
+		WHERE defend_union_name = ?
+			AND attack_name NOT IN (SELECT name FROM team_user WHERE name != '')
+			AND result = 0
+			AND attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
+			AND attack_hero1_level >= 15 AND attack_hero2_level >= 15 AND attack_hero3_level >= 15
+			AND attack_hp >= ?
+			AND npc = 0 AND all_skill_info != "" AND all_skill_info IS NOT NULL
+	),
+	team_counts AS (
+		SELECT
+			player_name, hero1_id, hero2_id, hero3_id, role,
+			COUNT(*) AS loss_count,
+			MAX(hp) AS hp,
+			MAX(hero1_level) AS hero1_level,
+			MAX(hero2_level) AS hero2_level,
+			MAX(hero3_level) AS hero3_level,
+			MAX(hero1_star) AS hero1_star,
+			MAX(hero2_star) AS hero2_star,
+			MAX(hero3_star) AS hero3_star,
+			MAX(total_star) AS total_star,
+			SUBSTR(MAX(time || '_' || idu), INSTR(MAX(time || '_' || idu), '_') + 1) AS idu,
+			SUBSTR(MAX(time || '_' || gear), INSTR(MAX(time || '_' || gear), '_') + 1) AS gear,
+			SUBSTR(MAX(time || '_' || hero_type), INSTR(MAX(time || '_' || hero_type), '_') + 1) AS hero_type,
+			SUBSTR(MAX(time || '_' || all_skill_info), INSTR(MAX(time || '_' || all_skill_info), '_') + 1) AS all_skill_info,
+			MAX(time) AS last_time
+		FROM enemy_losses
+		GROUP BY player_name, hero1_id, hero2_id, hero3_id, role
+	)`
+
+	args := []interface{}{myUnion, minHp, myUnion, minHp}
+
+	var total int64
+	countQuery := baseQuery + ` SELECT COUNT(*) FROM team_counts`
+	if err := model.Conn.Raw(countQuery, args...).Scan(&total).Error; err != nil {
+		return global.Response{Message: "查询失败: " + err.Error()}.Error()
+	}
+
+	offset := (page - 1) * pageSize
+	dataQuery := baseQuery + ` SELECT player_name, hero1_id, hero2_id, hero3_id, hero1_level, hero2_level, hero3_level,
+		hero1_star, hero2_star, hero3_star, total_star, hp, loss_count, last_time, idu, all_skill_info, role, gear, hero_type
+		FROM team_counts
+		ORDER BY loss_count DESC, last_time DESC
+		LIMIT ? OFFSET ?`
+
+	var results []EnemyTeam
+	if err := model.Conn.Raw(dataQuery, append(args, pageSize, offset)...).Scan(&results).Error; err != nil {
+		return global.Response{Message: "查询失败: " + err.Error()}.Error()
+	}
+
+	log.Printf("查询战败敌方队伍: minHp=%d, page=%d, total=%d, 结果: %d条", minHp, page, total, len(results))
+	return global.Response{Data: map[string]interface{}{
+		"list":     results,
+		"total":    total,
+		"page":     page,
+		"pageSize": pageSize,
+	}}.Success()
+}
+
 // GetBattleReports 查询全部战斗记录
 // GetBattleReports 查询战报（fightType: 0=全部 1=进攻 2=防守；myUnion 为当前同盟名，进攻/防守以当前同盟视角判断）
 func (a *App) GetBattleReports(name string, minHp int, fightType int, myUnion string, page int, pageSize int) string {
@@ -792,6 +1078,9 @@ func (a *App) GetBattleReports(name string, minHp int, fightType int, myUnion st
 
 	var total int64
 	query.Count(&total)
+	if total > 50 {
+		total = 50
+	}
 
 	var results []model.BattleReport
 	query.Order("time DESC").Offset((page - 1) * pageSize).Limit(pageSize).Find(&results)
@@ -804,8 +1093,189 @@ func (a *App) GetBattleReports(name string, minHp int, fightType int, myUnion st
 	}}.Success()
 }
 
-// GetMyUnionName 从同盟成员数据推断当前同盟名（成员参战战报中出现的同盟）
-func (a *App) GetMyUnionName() string {
+// GetSiegeSummary 攻城战报全局汇总（不绑定任务）
+// 行=参战角色(角色ID/名字/分组)，列=每个城池一个子块(出勤/灭敌数/拆迁值/战报数)
+// 灭敌数=防守方兵力变化(战前defend_hp-战后defend_hp_after，旧库无战后列则为0，不降级为战报条数)
+// 拆迁值=累加耐久下降(durability)，不再用战报条数近似
+// 数据源：battle_report(详细战报) 与 reports(攻城考勤战报) 合并
+// 城池匹配：战报地点归一化后命中"三国城池名单 ∪ 攻城任务名"才计为城池列；未命中的地点(沃土/土地/营垒等)统一归入"其他"
+func (a *App) GetSiegeSummary() string {
+	cityExpr := "COALESCE(NULLIF(wid_name, ''), CAST(wid AS TEXT))"
+
+	// 城池名单：三国城池大全 + 已创建攻城任务的任务名(清洗后)
+	knownCities := map[string]bool{}
+	for _, c := range threeKingdomsCityList {
+		knownCities[c] = true
+	}
+	var tasks []model.Task
+	model.Conn.Find(&tasks)
+	for _, t := range tasks {
+		if tn := extractCityFromTaskName(t.Name); tn != "" {
+			knownCities[tn] = true
+		}
+	}
+	isCity := func(name string) bool { return name != "" && knownCities[name] }
+
+	// 城池列表（两表合并，只保留命中城池名单的地点）
+	var cities []string
+	// 城池名归一化（"营陵Lv.6"/"土地（Lv.5）"/"123,456" → 纯城池名），作为汇总第一分组键
+	normCity := func(name string) string { return extractCityName(name) }
+
+	citySet := map[string]bool{}
+	var brCities []string
+	model.Conn.Model(&model.BattleReport{}).
+		Where("attack_name != '' AND wid_name != '' AND attack_name IN (SELECT name FROM team_user WHERE name != '')").
+		Distinct("wid_name").Order("wid_name ASC").Pluck("wid_name", &brCities)
+	for _, c := range brCities {
+		if n := normCity(c); isCity(n) {
+			citySet[n] = true
+		}
+	}
+	var rCities []string
+	model.Conn.Model(&model.Report{}).
+		Where("attack_name != '' AND " + cityExpr + " != '' AND attack_name IN (SELECT name FROM team_user WHERE name != '')").
+		Distinct(cityExpr).Order(cityExpr + " ASC").Pluck(cityExpr, &rCities)
+	for _, c := range rCities {
+		if n := normCity(c); isCity(n) {
+			citySet[n] = true
+		}
+	}
+	for c := range citySet {
+		cities = append(cities, c)
+	}
+	sort.Strings(cities)
+
+	// 角色ID/分组 映射（以 team_user 为准）
+	groupMap := map[string]string{}
+	idMap := map[string]string{}
+	var users []model.TeamUser
+	model.Conn.Find(&users)
+	for _, u := range users {
+		groupMap[u.Name] = u.Group
+		idMap[u.Name] = fmt.Sprint(u.Id)
+	}
+
+	type aggRow struct {
+		AttackName    string
+		AttackRoleID  string
+		CityName      string
+		Cnt           int64
+		KillCnt       int64
+		DurabilitySum int64
+	}
+	// durability/defend_hp_after 列由新版本首次启动 AutoMigrate 补齐；旧库可能缺失，动态判断
+	// 灭敌数：按防守方兵力变化(战前defend_hp-战后defend_hp_after)统计，不降级为战报条数
+	// 拆迁值：只累加耐久下降(durability)，不再用战报条数近似
+	durExprBR := "0"
+	if hasColumn("battle_report", "durability") {
+		durExprBR = "COALESCE(SUM(durability), 0)"
+	}
+	durExprR := "0"
+	if hasColumn("reports", "durability") {
+		durExprR = "COALESCE(SUM(durability), 0)"
+	}
+	killExprBR := "0"
+	if hasColumn("battle_report", "defend_hp_after") {
+		killExprBR = "COALESCE(SUM(CASE WHEN defend_hp >= defend_hp_after THEN defend_hp - defend_hp_after ELSE defend_hp END), 0)"
+	}
+	killExprR := "0"
+	if hasColumn("reports", "defend_hp_after") {
+		killExprR = "COALESCE(SUM(CASE WHEN defend_hp >= defend_hp_after THEN defend_hp - defend_hp_after ELSE defend_hp END), 0)"
+	}
+	var aggs []aggRow
+	model.Conn.Raw(`SELECT attack_name, '' AS attack_role_id, wid_name AS city_name,
+		COUNT(*) AS cnt,
+		`+killExprBR+` AS kill_cnt,
+		`+durExprBR+` AS durability_sum
+		FROM battle_report WHERE attack_name != '' AND wid_name != ''
+		AND attack_name IN (SELECT name FROM team_user WHERE name != '')
+		GROUP BY attack_name, wid_name
+		UNION ALL
+		SELECT attack_name, attack_role_id, ` + cityExpr + ` AS city_name,
+		COUNT(*) AS cnt,
+		`+killExprR+` AS kill_cnt,
+		`+durExprR+` AS durability_sum
+		FROM reports WHERE attack_name != '' AND ` + cityExpr + ` != ''
+		AND attack_name IN (SELECT name FROM team_user WHERE name != '')
+		GROUP BY attack_name, attack_role_id, ` + cityExpr).Scan(&aggs)
+
+	type CityStat struct {
+		Present  bool `json:"present"`
+		Kill     int  `json:"kill"`
+		Demolish int  `json:"demolish"`
+		Reports  int  `json:"reports"`
+	}
+	type Row struct {
+		RoleId string                `json:"role_id"`
+		Name   string                `json:"name"`
+		Group  string                `json:"group"`
+		Cities map[string]*CityStat  `json:"cities"`
+	}
+
+	rowMap := map[string]*Row{}
+	var rows []*Row
+	for _, agg := range aggs {
+		key := agg.AttackName
+		row, ok := rowMap[key]
+		if !ok {
+			roleId := agg.AttackRoleID
+			if roleId == "" {
+				roleId = idMap[agg.AttackName]
+			}
+			row = &Row{
+				RoleId: roleId,
+				Name:   agg.AttackName,
+				Group:  groupMap[agg.AttackName],
+				Cities: map[string]*CityStat{},
+			}
+			rowMap[key] = row
+			rows = append(rows, row)
+		}
+		stat := row.Cities[normCity(agg.CityName)]
+		if stat == nil {
+			stat = &CityStat{}
+			row.Cities[normCity(agg.CityName)] = stat
+		}
+		stat.Present = true
+		stat.Kill += int(agg.KillCnt)
+		stat.Reports += int(agg.Cnt)
+		stat.Demolish += int(agg.DurabilitySum)
+	}
+
+	return global.Response{Data: map[string]interface{}{
+		"cities": cities,
+		"rows":   rows,
+	}}.Success()
+}
+
+// hasColumn 判断某表是否存在某列（旧库可能缺新列）
+func hasColumn(table, col string) bool {
+	var n int
+	model.Conn.Raw("SELECT COUNT(*) FROM pragma_table_info(?) WHERE name = ?", table, col).Scan(&n)
+	return n > 0
+}
+
+// 城池/地名归一化：去掉坐标与等级后缀，保留城池名本体（如"营陵Lv.6"→"营陵"）
+var (
+	cityCoordRe = regexp.MustCompile(`\d+\s*[,，]\s*\d+`)
+	cityLvRe    = regexp.MustCompile(`(?i)lv\.?\s*\d+`)
+	cityBracket = regexp.MustCompile(`[（(][^）)]*[）)]`)
+)
+
+func extractCityName(name string) string {
+	name = strings.TrimSpace(name)
+	name = cityCoordRe.ReplaceAllString(name, "")
+	name = cityLvRe.ReplaceAllString(name, "")
+	name = cityBracket.ReplaceAllString(name, "")
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "未知地点"
+	}
+	return name
+}
+
+// resolveMyUnion 从同盟成员数据推断当前同盟名（成员参战战报中出现的同盟），返回原始字符串
+func (a *App) resolveMyUnion() string {
 	var union string
 	model.Conn.Raw(`SELECT attack_union_name FROM battle_report
 		WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
@@ -822,6 +1292,12 @@ func (a *App) GetMyUnionName() string {
 			WHERE attack_union_name != ''
 			GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1`).Scan(&union)
 	}
+	return union
+}
+
+// GetMyUnionName 从同盟成员数据推断当前同盟名（成员参战战报中出现的同盟）
+func (a *App) GetMyUnionName() string {
+	union := a.resolveMyUnion()
 	if union == "" {
 		return global.Response{Message: "未能从战报推断出当前同盟，请先同步同盟成员并在战报列表翻页"}.Error()
 	}

@@ -501,10 +501,16 @@ func parseHeroInfo(report model.BattleReport) model.BattleReport {
 	defendHeroInfo := splitAndFilter(report.DefendAllHeroInfo, ";")
 	fmt.Printf("防守方武将信息: %v\n", defendHeroInfo)
 
+	var defendHpAfter int64 = 0
 	for i, hero := range defendHeroInfo {
 		if len(hero) >= 2 {
 			heroID, _ := strconv.ParseInt(hero[0], 10, 64)
 			heroLevel, _ := strconv.ParseInt(hero[1], 10, 64)
+			// hero格式: id,等级,战前兵力,战后兵力,经验  -> 战后兵力在 index 3
+			if len(hero) > 3 {
+				hpAfter, _ := strconv.ParseInt(hero[3], 10, 64)
+				defendHpAfter += hpAfter
+			}
 
 			switch i {
 			case 0:
@@ -519,6 +525,7 @@ func parseHeroInfo(report model.BattleReport) model.BattleReport {
 			}
 		}
 	}
+	report.DefendHpAfter = defendHpAfter
 
 	return report
 }
@@ -565,6 +572,27 @@ func parseReport(data []byte) {
 		var neededreports []model.Report
 		var latestTime int64
 
+		// 探测原始JSON中的耐久/守军字段：优先使用明确命中，否则保持0
+		durabilityKeys := []string{"durability", "endure", "endurance", "defend_durability", "city_durability", "jian_zhi", "durability_down"}
+		armyNumKeys := []string{"defend_army_num", "army_num", "defend_army", "defend_army_count", "shou_jun", "army_count"}
+
+		extractField := func(m map[string]interface{}, keys []string) int {
+			for _, k := range keys {
+				if v, ok := m[k]; ok {
+					switch t := v.(type) {
+					case float64:
+						return int(t)
+					case int:
+						return t
+					case string:
+						n, _ := strconv.Atoi(strings.TrimSpace(t))
+						return n
+					}
+				}
+			}
+			return 0
+		}
+
 		for _, v := range jsondata {
 			reportJSON, err := json.Marshal(v[0])
 			if err != nil {
@@ -572,11 +600,27 @@ func parseReport(data []byte) {
 				continue
 			}
 
+			var rawMap map[string]interface{}
 			var report model.Report
-			err = json.Unmarshal(reportJSON, &report)
+			if json.Unmarshal(reportJSON, &rawMap) == nil {
+				err = json.Unmarshal(reportJSON, &report)
+			} else {
+				reportJSON = nil
+			}
 			if err != nil {
 				fmt.Println("Error unmarshalling report:", err)
 				continue
+			}
+
+			// 探测耐久/守军字段
+			if rawMap != nil {
+				report.Durability = extractField(rawMap, durabilityKeys)
+				report.DefendArmyNum = extractField(rawMap, armyNumKeys)
+				if report.Durability > 0 || report.DefendArmyNum > 0 {
+					log.Printf("战报[%d] 耐久下降=%d 守军数量=%d\n", report.BattleID, report.Durability, report.DefendArmyNum)
+				}
+				report.DefendHpAfter = sumHeroHpAfter(report.DefendAllHeroInfo)
+				report.RawJson = string(reportJSON)
 			}
 
 			reports = append(reports, report)
@@ -661,6 +705,28 @@ func parseTeamUser(data []byte) {
 	}
 }
 
+// sumHeroHpAfter 从武将信息串(格式 id,等级,战前兵力,战后兵力,经验;...)累加战后总兵力
+func sumHeroHpAfter(info string) int {
+	total := 0
+	if info == "" {
+		return 0
+	}
+	for _, part := range strings.Split(info, ";") {
+		if part == "" {
+			continue
+		}
+		fields := strings.Split(part, ",")
+		if len(fields) > 3 {
+			n, err := strconv.Atoi(strings.TrimSpace(fields[3]))
+			if err == nil {
+				total += n
+			}
+		}
+	}
+	return total
+}
+
+// parseZlibData 解压 zlib 数据
 func parseZlibData(data []byte) []byte {
 	if len(data) >= 2 && data[0] == 120 && data[1] == 156 {
 		compressedReader := bytes.NewReader(data)

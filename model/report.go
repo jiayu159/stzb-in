@@ -104,6 +104,10 @@ type Report struct {
 	WidName                 string `json:"wid_name"`
 	WorldNpcArmy            string `json:"world_npc_army"`
 	YiLingPressAttack       int    `json:"yi_ling_press_attack"`
+	Durability              int    `json:"durability"`        // 攻城耐久下降值(从战报原始数据探测提取)
+	DefendArmyNum           int    `json:"defend_army_num"`   // 防守方守军数量(从战报原始数据探测提取)
+	DefendHpAfter           int    `json:"defend_hp_after"`   // 防守方战后总兵力
+	RawJson                 string `json:"-" gorm:"column:raw_json"` // 战报原始JSON，用于核对未知字段名
 }
 
 func ToReport(data []any) {

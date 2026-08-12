@@ -53,7 +53,7 @@ onMounted(() => {
         <n-card :bordered="false" class="page-card">
             <div class="page-header">
                 <div>
-                    <h2 class="page-title">长史助手</h2>
+                    <h2 class="page-title">妲己小秘书</h2>
                     <p class="page-desc">
                         <n-tag size="small" type="success" :bordered="false">数据实时同步</n-tag>
                         <n-tag v-if="sending" size="small" type="warning" :bordered="false" style="margin-left:6px;">回复中...</n-tag>
@@ -95,7 +95,7 @@ onMounted(() => {
                     <div class="msg-avatar"><Bot :size="16" /></div>
                     <div class="msg-bubble thinking">
                         <RefreshCw :size="14" class="spin" style="vertical-align:-2px;" />
-                        长史思考中...
+                        妲己思考中...
                     </div>
                 </div>
             </div>
@@ -154,6 +154,7 @@ onMounted(() => {
 
 .msg-list {
     flex: 1;
+    height: 420px;
     overflow-y: auto;
     padding: 16px 8px 24px;
     border: 1px solid rgba(128, 128, 128, 0.15);

@@ -1,6 +1,6 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
-import { NCard, NButton, NSpace, NTag, NInput, NEmpty, NGrid, NGi, useMessage, useDialog } from 'naive-ui'
+import { ref, computed, h, onMounted } from 'vue'
+import { NCard, NButton, NSpace, NTag, NInput, NEmpty, NDataTable, useMessage, useDialog } from 'naive-ui'
 import { GetTeamUser } from '../../wailsjs/go/main/App'
 import { formatTimestamp, splitwid } from '@/utils/format'
 import * as XLSX from 'xlsx'
@@ -21,6 +21,21 @@ const filteredUsers = computed(() => {
         u.group.toLowerCase().includes(keyword)
     )
 })
+
+const columns = [
+    { title: 'ID', key: 'id', width: 70, sorter: (a, b) => a.id - b.id, defaultSortOrder: false },
+    { title: '名字', key: 'name', minWidth: 120 },
+    {
+        title: '分组', key: 'group', minWidth: 100,
+        render: (row) => h(NTag, { size: 'small', bordered: false, type: 'info' }, { default: () => row.group })
+    },
+    { title: '势力', key: 'power', width: 80, sorter: (a, b) => a.power - b.power, defaultSortOrder: false },
+    { title: '周武勋', key: 'wu', width: 90, sorter: (a, b) => a.wu - b.wu, defaultSortOrder: false },
+    { title: '总贡献', key: 'contribute_total', width: 90, sorter: (a, b) => a.contribute_total - b.contribute_total, defaultSortOrder: false },
+    { title: '周贡献', key: 'contribute_week', width: 90, sorter: (a, b) => a.contribute_week - b.contribute_week, defaultSortOrder: false },
+    { title: '位置', key: 'pos', width: 110, render: (row) => splitwid(row.pos) },
+    { title: '进盟时间', key: 'join_time', width: 170, render: (row) => formatTimestamp(row.join_time) },
+]
 
 const syncuser = () => {
     dialog.info({
@@ -100,58 +115,15 @@ onMounted(() => {
                 </template>
             </n-input>
 
-            <div class="member-list" v-if="filteredUsers.length > 0">
-                <div class="member-card" v-for="user in filteredUsers" :key="user.id">
-                    <div class="member-header">
-                        <span class="member-name">{{ user.name }}</span>
-                        <n-tag :bordered="false" type="info" size="small">{{ user.group }}</n-tag>
-                    </div>
-                    <n-grid :cols="2" :x-gap="12" :y-gap="8" class="member-stats">
-                        <n-gi>
-                            <div class="stat-item">
-                                <span class="stat-label">ID</span>
-                                <span class="stat-value">{{ user.id }}</span>
-                            </div>
-                        </n-gi>
-                        <n-gi>
-                            <div class="stat-item">
-                                <span class="stat-label">势力</span>
-                                <span class="stat-value">{{ user.power }}</span>
-                            </div>
-                        </n-gi>
-                        <n-gi>
-                            <div class="stat-item">
-                                <span class="stat-label">周武勋</span>
-                                <span class="stat-value highlight">{{ user.wu }}</span>
-                            </div>
-                        </n-gi>
-                        <n-gi>
-                            <div class="stat-item">
-                                <span class="stat-label">总贡献</span>
-                                <span class="stat-value">{{ user.contribute_total }}</span>
-                            </div>
-                        </n-gi>
-                        <n-gi>
-                            <div class="stat-item">
-                                <span class="stat-label">周贡献</span>
-                                <span class="stat-value">{{ user.contribute_week }}</span>
-                            </div>
-                        </n-gi>
-                        <n-gi>
-                            <div class="stat-item">
-                                <span class="stat-label">位置</span>
-                                <span class="stat-value">{{ splitwid(user.pos) }}</span>
-                            </div>
-                        </n-gi>
-                        <n-gi :span="2">
-                            <div class="stat-item">
-                                <span class="stat-label">进盟时间</span>
-                                <span class="stat-value">{{ formatTimestamp(user.join_time) }}</span>
-                            </div>
-                        </n-gi>
-                    </n-grid>
-                </div>
-            </div>
+            <n-data-table
+                v-if="filteredUsers.length > 0"
+                :columns="columns"
+                :data="filteredUsers"
+                :bordered="true"
+                :single-line="false"
+                :loading="loading"
+                :max-height="560"
+            />
             <n-empty v-else description="暂无成员数据" style="padding: 60px 0;" />
         </n-card>
     </div>
@@ -188,62 +160,5 @@ onMounted(() => {
 
 .search-input {
     margin-bottom: 20px;
-}
-
-.member-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.member-card {
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: 10px;
-    padding: 16px 20px;
-    transition: box-shadow 0.2s, transform 0.2s;
-
-    &:hover {
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
-        transform: translateY(-1px);
-    }
-}
-
-.member-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 12px;
-}
-
-.member-name {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--color-text);
-}
-
-.member-stats {
-    margin-top: 4px;
-}
-
-.stat-item {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.stat-label {
-    font-size: 12px;
-    color: var(--color-text-secondary);
-}
-
-.stat-value {
-    font-size: 14px;
-    color: var(--color-text);
-    font-weight: 500;
-
-    &.highlight {
-        color: var(--color-accent);
-    }
 }
 </style>

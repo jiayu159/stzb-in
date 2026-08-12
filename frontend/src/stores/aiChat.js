@@ -6,7 +6,7 @@ export const useAiChatStore = defineStore('aiChat', {
         messages: [
             {
                 role: 'assistant',
-                content: '我是长史助手，已实时同步同盟数据库数据（成员、战报、攻城任务）。你可以问我如"哪个分组武勋最高""最近战报打的最多的地方是哪里""某某任务的完成情况"等问题。'
+                content: '我是妲己小秘书，已实时同步同盟数据库数据（成员、战报、攻城任务）。你可以问我如"哪个分组武勋最高""最近战报打的最多的地方是哪里""某某任务的完成情况"等问题。'
             }
         ],
         sending: false,
@@ -44,7 +44,7 @@ export const useAiChatStore = defineStore('aiChat', {
                     this.messages = [
                         {
                             role: 'assistant',
-                            content: '我是长史助手，已实时同步同盟数据库数据（成员、战报、攻城任务）。你可以问我如"哪个分组武勋最高""最近战报打的最多的地方是哪里""某某任务的完成情况"等问题。'
+                            content: '我是妲己小秘书，已实时同步同盟数据库数据（成员、战报、攻城任务）。你可以问我如"哪个分组武勋最高""最近战报打的最多的地方是哪里""某某任务的完成情况"等问题。'
                         }
                     ]
                 }

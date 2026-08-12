@@ -57,6 +57,8 @@ export function GetDashboardStats():Promise<string>;
 
 export function GetDbList():Promise<string>;
 
+export function GetDefeatedEnemyTeams(arg1:number,arg2:number,arg3:number):Promise<string>;
+
 export function GetFetchTemplate():Promise<string>;
 
 export function GetGroupWu():Promise<string>;
@@ -73,6 +75,8 @@ export function GetPlayerTeam(arg1:string,arg2:string,arg3:number,arg4:number):P
 
 export function GetReportNumByTaskId(arg1:number):Promise<string>;
 
+export function GetSiegeSummary():Promise<string>;
+
 export function GetTask(arg1:number):Promise<string>;
 
 export function GetTaskList():Promise<string>;
@@ -86,6 +90,8 @@ export function GetTeamUser(arg1:string):Promise<string>;
 export function GetTeamWinRate(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number):Promise<string>;
 
 export function GetTeamWinRateByTeam(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number):Promise<string>;
+
+export function GetUnionMemberTopTeams(arg1:number,arg2:number,arg3:number):Promise<string>;
 
 export function GetVersion():Promise<string>;
 

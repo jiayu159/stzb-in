@@ -116,10 +116,10 @@ const routes = [
         meta: { title: '队伍克制' }
     },
     {
-        path: '/longshi',
-        name: 'longshi',
+        path: '/daji',
+        name: 'daji',
         component: LongShiHelper,
-        meta: { title: '长史助手' }
+        meta: { title: '妲己小秘书' }
     }
 ]
 

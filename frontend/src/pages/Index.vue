@@ -55,12 +55,12 @@ onMounted(() => {
                     <n-tag :bordered="false" type="success" size="small">敌军动向监控</n-tag>
                     <n-tag :bordered="false" type="success" size="small">热门排行</n-tag>
                     <n-tag :bordered="false" type="success" size="small">队伍克制分析</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">长史助手（AI）</n-tag>
+                    <n-tag :bordered="false" type="success" size="small">妲己小秘书（AI）</n-tag>
                     <n-tag :bordered="false" type="success" size="small">考勤导出增强</n-tag>
                     <n-tag :bordered="false" type="warning" size="small">同盟战报自动翻阅</n-tag>
                     <n-tag :bordered="false" type="warning" size="small">攻城考勤时间定位</n-tag>
                 </div>
-                <p><strong>长史助手：</strong>基于 Qwen3-8B 的同盟数据 AI 助手，每次提问自动拉取最新数据库快照（含最近100条战报）先压缩提炼再回答，问什么都能答。支持思考模式开关（默认开启），开启后回答更严谨，思考过程可折叠查看。</p>
+                <p><strong>妲己小秘书：</strong>基于 Qwen3-8B 的同盟数据 AI 助手，先分析你的问题并生成对应的 SQL 查询，在本地数据库查得结果后把字段翻译成通俗中文回答，问什么都能答。支持思考模式开关（默认开启），开启后回答更严谨，思考过程可折叠查看。</p>
                 <p><strong>自动翻阅：</strong>在「同盟战报」页面设定截止时间，程序自动在游戏中翻页抓取战报，到达指定时间自动停止。</p>
                 <p><strong>时间定位：</strong>在「攻城考勤」弹窗中设定截止时间，翻阅时自动跟踪进度，翻越截止时间点的战报自动跳过。</p>
             </div>
@@ -102,9 +102,9 @@ onMounted(() => {
                     <template #icon><Crosshair :size="16" /></template>
                     队伍克制
                 </n-button>
-                <n-button quaternary type="primary" @click="$router.push('/longshi')">
+                <n-button quaternary type="primary" @click="$router.push('/daji')">
                     <template #icon><Bot :size="16" /></template>
-                    长史助手
+                    妲己小秘书
                 </n-button>
                 <n-button quaternary @click="$router.push('/battlereports')">
                     <template #icon><List :size="16" /></template>

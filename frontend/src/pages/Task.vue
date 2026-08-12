@@ -3,18 +3,19 @@ import { ref, onMounted, computed, watch, onUnmounted } from 'vue'
 import {
     NCard, NButton, NSpace, NTag, NEmpty,
     NInput, NFormItem, NSelect, NDatePicker, NPopconfirm, NModal,
-    NDataTable, NStatistic, NSpin, NProgress, NAlert,
+    NDataTable, NStatistic, NSpin, NProgress, NAlert, NTabs, NTabPane,
+    NCheckbox, NCheckboxGroup,
     useMessage, useDialog
 } from 'naive-ui'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
 import {
     GetTeamGroup, CreateTask, GetTaskList, DeleteTask, GetTeamUser,
     EnableGetReport, DisableGetReport, GetReportNumByTaskId, StatisticsReport,
-    GetTask, DeleteTaskReport, ExportTaskReport
+    GetTask, DeleteTaskReport, ExportTaskReport, GetSiegeSummary
 } from '../../wailsjs/go/main/App'
 import { formatTimestampMs, splitwid } from '@/utils/format'
 import * as XLSX from 'xlsx'
-import { Plus, RefreshCw, Eye, Play, Trash2, Eraser, Timer } from 'lucide-vue-next'
+import { Plus, RefreshCw, Eye, Play, Trash2, Eraser, Timer, Download } from 'lucide-vue-next'
 
 const nmessage = useMessage()
 const addtaskshow = ref(false)
@@ -27,6 +28,186 @@ const createing = ref(false)
 const tasks = ref([])
 const taskNum = ref(0)
 const loading = ref(false)
+
+// 攻城任务 / 攻城战报汇总 子版块切换
+const activeTab = ref('tasks')
+const siegeRows = ref([])
+const siegeCities = ref([])
+const siegeLoading = ref(false)
+// 四个子类是否参与导出（默认全部勾选）
+const siegeExportSubs = ref(['present', 'kill', 'demolish', 'reports'])
+const siegeExportSubOptions = [
+    { label: '出勤', value: 'present' },
+    { label: '灭敌', value: 'kill' },
+    { label: '拆迁', value: 'demolish' },
+    { label: '战报数', value: 'reports' },
+]
+// 汇总列头筛选状态：分组（单选）与城池（多选，与分组同为候选列表过滤）
+const siegeGroupFilter = ref(null)
+const siegeCityFilter = ref(null)
+const siegeGroupOptions = computed(() => {
+    const groups = new Set()
+    siegeRows.value.forEach(r => { if (r.group) groups.add(r.group) })
+    return [...groups].map(g => ({ label: g, value: g }))
+})
+const siegeCityOptions = computed(() => siegeCities.value.map(c => ({ label: c, value: c })))
+// 扁平化：每行 = 成员 × 城池
+const siegeFlatRows = computed(() => {
+    const rows = []
+    siegeRows.value.forEach(r => {
+        siegeCities.value.forEach(c => {
+            const s = (r.cities && r.cities[c]) || {}
+            rows.push({
+                role_id: r.role_id,
+                name: r.name,
+                group: r.group,
+                city: c,
+                present: !!s.present,
+                kill: s.kill || 0,
+                demolish: s.demolish || 0,
+                reports: s.reports || 0,
+            })
+        })
+    })
+    return rows
+})
+const filteredSiegeRows = computed(() => {
+    let rows = siegeFlatRows.value
+    if (siegeGroupFilter.value) rows = rows.filter(r => r.group === siegeGroupFilter.value)
+    if (siegeCityFilter.value && siegeCityFilter.value.length > 0) rows = rows.filter(r => siegeCityFilter.value.includes(r.city))
+    return rows
+})
+const onSiegeFilters = (filters) => {
+    siegeGroupFilter.value = (filters && filters.group) || null
+    siegeCityFilter.value = (filters && filters.city) || null
+}
+
+// 扁平表格列：固定列 + 城池列（列头候选过滤，与分组一致）
+const siegeColumns = computed(() => [
+    { title: '角色ID', key: 'role_id', width: 90, fixed: 'left' },
+    { title: '名字', key: 'name', minWidth: 100, fixed: 'left' },
+    {
+        title: '分组',
+        key: 'group',
+        width: 110,
+        fixed: 'left',
+        filterMultiple: false,
+        filterOptions: siegeGroupOptions.value,
+        filter: (value, row) => row.group === value,
+        render: (row) => row.group || '-'
+    },
+    {
+        title: '城池',
+        key: 'city',
+        width: 120,
+        filterMultiple: true,
+        filterOptions: siegeCityOptions.value,
+        filter: (value, row) => row.city === value,
+        render: (row) => row.city || '-'
+    },
+    {
+        title: '出勤',
+        key: 'present',
+        width: 90,
+        render: (row) => row.present ? '是' : '-'
+    },
+    {
+        title: '灭敌',
+        key: 'kill',
+        width: 90,
+        render: (row) => String(row.kill || 0)
+    },
+    {
+        title: '拆迁',
+        key: 'demolish',
+        width: 90,
+        render: (row) => String(row.demolish || 0)
+    },
+    {
+        title: '战报数',
+        key: 'reports',
+        width: 90,
+        render: (row) => String(row.reports || 0)
+    },
+])
+
+const siegeScrollX = computed(() => 800)
+
+const loadSiegeSummary = () => {
+    siegeLoading.value = true
+    GetSiegeSummary().then(v => {
+        let resp = JSON.parse(v)
+        if (resp.code == 200) {
+            siegeCities.value = resp.data.cities || []
+            siegeRows.value = resp.data.rows || []
+        } else {
+            nmessage.error(resp.msg)
+        }
+    }).catch(e => nmessage.error('获取攻城战报汇总失败: ' + e)).finally(() => {
+        siegeLoading.value = false
+    })
+}
+
+// 根据勾选的子类字段构建导出表头/数据行（宽表格式：每城一行四列）
+const siegeSubMeta = { present: '出勤', kill: '灭敌', demolish: '拆迁', reports: '战报数' }
+const exportSiegeBody = (cities) => {
+    const subs = siegeExportSubs.value
+    const header = ['角色ID', '名字', '分组']
+    cities.forEach(c => {
+        subs.forEach(s => header.push(`${c}-${siegeSubMeta[s]}`))
+    })
+    const body = siegeRows.value.map(r => {
+        const line = [r.role_id, r.name, r.group]
+        cities.forEach(c => {
+            const st = (r.cities && r.cities[c]) || {}
+            subs.forEach(s => {
+                if (s === 'present') line.push(st.present ? '是' : '-')
+                else line.push(st[s] || 0)
+            })
+        })
+        return line
+    })
+    return { header, body }
+}
+const writeSiegeXlsx = (cities, sheetName, filename) => {
+    if (cities.length === 0) {
+        nmessage.warning('请先勾选要导出的城池')
+        return false
+    }
+    if (siegeExportSubs.value.length === 0) {
+        nmessage.warning('请至少勾选一个要导出的子类')
+        return false
+    }
+    const { header, body } = exportSiegeBody(cities)
+    const ws = XLSX.utils.aoa_to_sheet([header, ...body])
+    ws['!cols'] = header.map(() => ({ wch: 14 }))
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, sheetName)
+    XLSX.writeFile(wb, filename)
+    nmessage.success(`导出成功，共 ${body.length} 条`)
+    return true
+}
+
+// 导出当前城：仅导出列头「城池」过滤勾选中的城池
+const exportSiegeChecked = () => {
+    if (filteredSiegeRows.value.length === 0) {
+        nmessage.warning('暂无数据可导出')
+        return
+    }
+    const cities = siegeCityFilter.value && siegeCityFilter.value.length > 0
+        ? [...siegeCityFilter.value]
+        : [...siegeCities.value]
+    writeSiegeXlsx(cities, '攻城战报汇总-当前城', '攻城战报汇总_当前城.xlsx')
+}
+
+// 导出所有城池（保持原格式）
+const exportSiegeAll = () => {
+    if (filteredSiegeRows.value.length === 0) {
+        nmessage.warning('暂无数据可导出')
+        return
+    }
+    writeSiegeXlsx([...siegeCities.value], '攻城战报汇总', '攻城战报汇总.xlsx')
+}
 
 // 城池分配助手：对每个目标分组，从用户填写的候选城池中选出离组内所有成员距离总和最近的城
 const assignCities = ref('')
@@ -222,6 +403,12 @@ const stopReport = () => {
     timeReached.value = false
     DisableGetReport()
 }
+
+watch(activeTab, (val) => {
+    if (val === 'siege' && siegeRows.value.length === 0) {
+        loadSiegeSummary()
+    }
+})
 
 watch(showModal, (val) => {
     if (!val) stopReport()
@@ -524,86 +711,133 @@ const detailData = computed(() => {
 
     <div class="page-task">
         <n-card class="page-card" embedded>
-            <div class="page-header">
-                <div class="page-header-info">
-                    <h2 class="page-title">攻城任务</h2>
-                    <p class="page-desc">任务数量：{{ taskNum }}</p>
-                </div>
-                <n-space>
-                    <n-button @click="getTaskList" :loading="loading">
-                        <template #icon><RefreshCw :size="16" /></template>
-                        刷新
-                    </n-button>
-                    <n-button type="primary" @click="addtaskshow = true">
-                        <template #icon><Plus :size="16" /></template>
-                        新增任务
-                    </n-button>
-                </n-space>
-            </div>
-
-            <div class="task-list" v-if="tasks.length > 0">
-                <div class="task-card" v-for="task in tasks" :key="task.id">
-                    <div class="task-header">
-                        <div class="task-title-row">
-                            <span class="task-name">{{ task.name }}</span>
-                            <span class="task-coords">({{ splitwid(task.pos) }})</span>
+            <n-tabs v-model:value="activeTab" type="line" animated>
+                <n-tab-pane name="tasks" tab="攻城任务">
+                    <div class="page-header">
+                        <div class="page-header-info">
+                            <h2 class="page-title">攻城任务</h2>
+                            <p class="page-desc">任务数量：{{ taskNum }}</p>
                         </div>
+                        <n-space>
+                            <n-button @click="getTaskList" :loading="loading">
+                                <template #icon><RefreshCw :size="16" /></template>
+                                刷新
+                            </n-button>
+                            <n-button type="primary" @click="addtaskshow = true">
+                                <template #icon><Plus :size="16" /></template>
+                                新增任务
+                            </n-button>
+                        </n-space>
                     </div>
 
-                    <div class="task-stats">
-                        <div class="task-stat-item">
-                            <span class="task-stat-label">目标分组</span>
-                            <div class="task-stat-tags">
-                                <n-tag :bordered="false" type="info" size="small" v-for="g in task.target" :key="g">
-                                    {{ g }}
-                                </n-tag>
+                    <div class="task-list" v-if="tasks.length > 0">
+                        <div class="task-card" v-for="task in tasks" :key="task.id">
+                            <div class="task-header">
+                                <div class="task-title-row">
+                                    <span class="task-name">{{ task.name }}</span>
+                                    <span class="task-coords">({{ splitwid(task.pos) }})</span>
+                                </div>
+                            </div>
+
+                            <div class="task-stats">
+                                <div class="task-stat-item">
+                                    <span class="task-stat-label">目标分组</span>
+                                    <div class="task-stat-tags">
+                                        <n-tag :bordered="false" type="info" size="small" v-for="g in task.target" :key="g">
+                                            {{ g }}
+                                        </n-tag>
+                                    </div>
+                                </div>
+                                <div class="task-stat-item">
+                                    <span class="task-stat-label">目标人数</span>
+                                    <span class="task-stat-value">{{ task.target_user_num }}</span>
+                                </div>
+                                <div class="task-stat-item">
+                                    <span class="task-stat-label">实到人数</span>
+                                    <span class="task-stat-value highlight">{{ task.complete_user_num }}</span>
+                                </div>
+                                <div class="task-stat-item">
+                                    <span class="task-stat-label">任务时间</span>
+                                    <span class="task-stat-value">{{ formatTimestampMs(task.time) }}</span>
+                                </div>
+                            </div>
+
+                            <div class="task-actions">
+                                <n-button size="small" @click="getTaskDetail(task.id)">
+                                    <template #icon><Eye :size="14" /></template>
+                                    考勤详情
+                                </n-button>
+                                <n-button type="info" size="small" @click="enableGetReport(task.id, task.pos)">
+                                    <template #icon><Play :size="14" /></template>
+                                    开始考勤
+                                </n-button>
+                                <n-popconfirm @positive-click="delTaskReport(task.id)" :show-icon="false">
+                                    <template #trigger>
+                                        <n-button type="warning" size="small">
+                                            <template #icon><Eraser :size="14" /></template>
+                                            清理战报
+                                        </n-button>
+                                    </template>
+                                    确认清理战报吗？数据删除后无法恢复。<br>清理战报可以减少统计考勤的耗时
+                                </n-popconfirm>
+                                <n-popconfirm @positive-click="delTask(task.id)" :show-icon="false">
+                                    <template #trigger>
+                                        <n-button type="error" size="small">
+                                            <template #icon><Trash2 :size="14" /></template>
+                                            删除任务
+                                        </n-button>
+                                    </template>
+                                    确认删除该任务吗？
+                                </n-popconfirm>
                             </div>
                         </div>
-                        <div class="task-stat-item">
-                            <span class="task-stat-label">目标人数</span>
-                            <span class="task-stat-value">{{ task.target_user_num }}</span>
-                        </div>
-                        <div class="task-stat-item">
-                            <span class="task-stat-label">实到人数</span>
-                            <span class="task-stat-value highlight">{{ task.complete_user_num }}</span>
-                        </div>
-                        <div class="task-stat-item">
-                            <span class="task-stat-label">任务时间</span>
-                            <span class="task-stat-value">{{ formatTimestampMs(task.time) }}</span>
-                        </div>
                     </div>
+                    <n-empty v-else description="暂无攻城任务" style="padding: 60px 0;" />
+                </n-tab-pane>
 
-                    <div class="task-actions">
-                        <n-button size="small" @click="getTaskDetail(task.id)">
-                            <template #icon><Eye :size="14" /></template>
-                            考勤详情
-                        </n-button>
-                        <n-button type="info" size="small" @click="enableGetReport(task.id, task.pos)">
-                            <template #icon><Play :size="14" /></template>
-                            开始考勤
-                        </n-button>
-                        <n-popconfirm @positive-click="delTaskReport(task.id)" :show-icon="false">
-                            <template #trigger>
-                                <n-button type="warning" size="small">
-                                    <template #icon><Eraser :size="14" /></template>
-                                    清理战报
-                                </n-button>
-                            </template>
-                            确认清理战报吗？数据删除后无法恢复。<br>清理战报可以减少统计考勤的耗时
-                        </n-popconfirm>
-                        <n-popconfirm @positive-click="delTask(task.id)" :show-icon="false">
-                            <template #trigger>
-                                <n-button type="error" size="small">
-                                    <template #icon><Trash2 :size="14" /></template>
-                                    删除任务
-                                </n-button>
-                            </template>
-                            确认删除该任务吗？
-                        </n-popconfirm>
+                <n-tab-pane name="siege" tab="攻城战报汇总">
+                    <div class="siege-toolbar">
+                        <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <span style="font-size:13px;opacity:0.7;line-height:1.6;">
+                                统计当前同盟成员的攻城战报：每个成员（角色ID/分组）在每座城池的
+                                <b>出勤</b>（是否攻击该城）、<b>灭敌数</b>（防守方兵力变化：战前−战后）、<b>拆迁值</b>（耐久下降累加）、<b>战报数</b>（该城战报总条数）。
+                                <br/>点击表头<b>分组</b>或<b>城池</b>列可通过候选列表勾选过滤；导出时分<b>当前城</b>（过滤勾选的城）与<b>所有城</b>。
+                            </span>
+                        </div>
+                        <div class="siege-check-row">
+                            <span class="siege-check-label">导出子类：</span>
+                            <n-checkbox-group v-model:value="siegeExportSubs" size="small">
+                                <n-checkbox v-for="opt in siegeExportSubOptions" :key="opt.value" :value="opt.value" :label="opt.label" />
+                            </n-checkbox-group>
+                        </div>
+                        <div class="siege-check-row">
+                            <n-button size="small" @click="loadSiegeSummary" :loading="siegeLoading">
+                                <template #icon><RefreshCw :size="14" /></template>
+                                刷新汇总
+                            </n-button>
+                            <n-button size="small" type="success" @click="exportSiegeChecked" :disabled="filteredSiegeRows.length === 0">
+                                <template #icon><Download :size="14" /></template>
+                                导出当前城
+                            </n-button>
+                            <n-button size="small" type="success" @click="exportSiegeAll" :disabled="filteredSiegeRows.length === 0">
+                                <template #icon><Download :size="14" /></template>
+                                导出所有城
+                            </n-button>
+                        </div>
                     </div>
-                </div>
-            </div>
-            <n-empty v-else description="暂无攻城任务" style="padding: 60px 0;" />
+                    <n-data-table
+                        :columns="siegeColumns"
+                        :data="filteredSiegeRows"
+                        :bordered="true"
+                        :single-line="false"
+                        :loading="siegeLoading"
+                        :max-height="560"
+                        :scroll-x="siegeScrollX"
+                        @update:filters="onSiegeFilters"
+                    />
+                    <n-empty v-if="!siegeLoading && siegeRows.length === 0" description="暂无攻城战报数据（需先在游戏内抓取攻城战报）" style="padding: 40px 0;" />
+                </n-tab-pane>
+            </n-tabs>
         </n-card>
     </div>
 </template>
@@ -623,6 +857,33 @@ const detailData = computed(() => {
     align-items: flex-start;
     justify-content: space-between;
     margin-bottom: 20px;
+}
+
+.siege-toolbar {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+
+.siege-check-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+    padding: 6px 10px;
+    background: var(--color-bg);
+    border-radius: 8px;
+}
+
+.siege-check-label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
 }
 
 .page-title {

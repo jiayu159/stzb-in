@@ -57,8 +57,8 @@ const menuOptions = [
         icon: renderIcon(Home)
     },
     {
-        label: '长史助手',
-        key: 'longshi',
+        label: '妲己小秘书',
+        key: 'daji',
         icon: renderIcon(Bot)
     },
     {

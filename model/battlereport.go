@@ -64,6 +64,7 @@ type BattleReport struct {
 	FirstOccupyLvnLand    int64  `json:"first_occupy_lvn_land" gorm:"first_occupy_lvn_land"`       // 首占标记
 	PressAttack           int64  `json:"press_attack" gorm:"press_attack"`                         // 压制进攻
 	Military              int64  `json:"military" gorm:"military"`                                 // 军事标记
+	DefendHpAfter         int64  `json:"defend_hp_after" gorm:"defend_hp_after"`                   // 防守方战后总兵力(3武将战前-战后差值即灭敌数)
 }
 
 // TableName 表名称
