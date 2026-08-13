@@ -164,17 +164,17 @@ func adbShotSize() (int, int, error) {
 	return w, h, nil
 }
 
-// adbSwipeUp 从下往上滑动一页
+// adbSwipeUp 从下往上滑动一页（高灵敏度：滑动距离更大、时长更短）
 func adbSwipeUp(w, h int) error {
 	device := findEmulatorDevice()
 	if device == "" {
 		return fmt.Errorf("未检测到模拟器")
 	}
 	x := w / 2
-	y1 := int(float64(h) * 0.80)
-	y2 := int(float64(h) * 0.25)
+	y1 := int(float64(h) * 0.88)
+	y2 := int(float64(h) * 0.12)
 	_, err := adbRun("-s", device, "shell", "input", "swipe",
-		strconv.Itoa(x), strconv.Itoa(y1), strconv.Itoa(x), strconv.Itoa(y2), "400")
+		strconv.Itoa(x), strconv.Itoa(y1), strconv.Itoa(x), strconv.Itoa(y2), "100")
 	return err
 }
 
@@ -219,8 +219,8 @@ func StartAdbScroll(targetTime int64, intervalMs int64) {
 		global.ExVar.NeedAdbScroll = false
 	}()
 
-	if intervalMs < 200 {
-		intervalMs = 200
+	if intervalMs < 1 {
+		intervalMs = 1
 	}
 	if intervalMs > 5000 {
 		intervalMs = 5000

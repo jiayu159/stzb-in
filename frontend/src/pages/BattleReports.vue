@@ -314,7 +314,14 @@ const reportColumns = [
     { title: '防守方同盟', key: 'defend_union_name', minWidth: 110 },
     { title: '攻方兵力', key: 'attack_hp', width: 90, render: (row) => formatHp(row.attack_hp) },
     { title: '守方兵力', key: 'defend_hp', width: 90, render: (row) => formatHp(row.defend_hp) },
-    { title: '类型', key: 'garrison', width: 70, render: (row) => row.garrison === 1 ? h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '拆迁' }) : h(NTag, { size: 'small', type: 'default', bordered: false }, { default: () => '主力' }) },
+    {
+        title: '类型', key: 'garrison', width: 80,
+        render: (row) => {
+            if (row.garrison === 1) return h(NTag, { size: 'small', type: 'warning', bordered: false }, { default: () => '拆迁' })
+            if ((row.attack_hp || 0) < 1000) return h(NTag, { size: 'small', type: 'error', bordered: false }, { default: () => '斯巴达' })
+            return h(NTag, { size: 'small', type: 'default', bordered: false }, { default: () => '主力' })
+        }
+    },
     {
         title: '结果', key: 'result', width: 90,
         render: (row) => {
@@ -435,7 +442,7 @@ onMounted(() => {
                         placeholder="请选择截止时间" clearable style="min-width:260px;" />
                     <div style="display:flex;align-items:center;gap:6px;">
                         <span style="font-size:12px;opacity:0.7;">翻页间隔(ms)</span>
-                        <n-input-number v-model:value="scrollInterval" :min="200" :max="5000" :step="100" :style="{ width: '110px' }" />
+                        <n-input-number v-model:value="scrollInterval" :min="1" :max="5000" :step="50" :style="{ width: '110px' }" />
                     </div>
                     <n-button type="success" @click="startScroll" icon-placement="right">
                         <template #icon><Play :size="16" /></template>
