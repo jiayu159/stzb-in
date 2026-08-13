@@ -65,6 +65,7 @@ type BattleReport struct {
 	PressAttack           int64  `json:"press_attack" gorm:"press_attack"`                         // 压制进攻
 	Military              int64  `json:"military" gorm:"military"`                                 // 军事标记
 	DefendHpAfter         int64  `json:"defend_hp_after" gorm:"defend_hp_after"`                   // 防守方战后总兵力(3武将战前-战后差值即灭敌数)
+	BattleDesc            string `json:"battle_desc" gorm:"battle_desc"`                           // 战报描述文本（翻地：占领了… / 拆除…）
 }
 
 // TableName 表名称

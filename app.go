@@ -1429,16 +1429,22 @@ func (a *App) GetMemberActivity() string {
 	var members []model.TeamUser
 	model.Conn.Find(&members)
 
-	// 翻地次数：本盟成员占领其他同盟领地（土地/沃土上的攻方胜利，防守方为其他同盟玩家）
+	// 翻地次数：本盟成员占领其他同盟领地（土地/要塞，不含沃土）的次数
+	// 判据：战报描述含"占领了/拆除"（battle_desc，新数据）或地点为土地/要塞（battle_desc 缺失的旧数据兜底）
 	myUnion := a.resolveMyUnion()
 	var landCounts []struct {
 		AttackName string
 		Cnt        int64
 	}
 	model.Conn.Raw(`SELECT attack_name, COUNT(*) AS cnt FROM battle_report
-		WHERE (wid_name LIKE '土地%' OR wid_name LIKE '沃土%')
+		WHERE (
+			(battle_desc != '' AND (battle_desc LIKE '%占领了%' OR battle_desc LIKE '%拆除%') AND battle_desc NOT LIKE '%沃土%')
+			OR
+			(battle_desc = '' AND wid_name LIKE '土地%' AND wid_name NOT LIKE '%沃土%')
+		)
 		AND attack_name IN (SELECT name FROM team_user WHERE name != '')
-		AND npc = 0 AND defend_union_name != '' AND defend_union_name != ?
+		AND defend_union_name != '' AND defend_union_name != ?
+		AND npc = 0
 		AND result IN (1,2,3,4,10,18,19)
 		GROUP BY attack_name`, myUnion).Scan(&landCounts)
 	landMap := make(map[string]int64, len(landCounts))

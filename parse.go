@@ -249,6 +249,30 @@ type BattleData struct {
 	Military              int64       `json:"military"`              // 军事(集结?)标记
 }
 
+// findBattleDesc 递归扫描战斗数据，提取含"占领了/拆除"的战报描述文本
+func findBattleDesc(v interface{}) string {
+	switch t := v.(type) {
+	case string:
+		if strings.Contains(t, "占领了") || strings.Contains(t, "拆除") {
+			return t
+		}
+	case []interface{}:
+		for _, e := range t {
+			if d := findBattleDesc(e); d != "" {
+				return d
+			}
+		}
+	case map[string]interface{}:
+		for _, e := range t {
+			if d := findBattleDesc(e); d != "" {
+				return d
+			}
+		}
+	}
+	return ""
+}
+
+// parseBattleData 解析战报数据
 func parseBattleData(data []byte) {
 	msgdata := parseZlibData(data)
 	fmt.Println("原始数据:", string(msgdata))
@@ -348,6 +372,7 @@ func parseBattleData(data []byte) {
 				Time:                  battleData.Time,
 				Wid:                   widStr,
 				WidName:               battleData.WidName,
+				BattleDesc:            findBattleDesc(battleArray),
 				AttackName:            battleData.AttackName,
 				AttackUnionName:       battleData.AttackUnionName,
 				AttackClanName:        battleData.AttackClanName,

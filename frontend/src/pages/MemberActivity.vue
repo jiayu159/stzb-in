@@ -157,7 +157,7 @@ import { h } from 'vue'
                 活跃度评分基于以下数据综合计算：<br>
                  <strong>战报数 × 0.4 + 武勋/1000 × 0.3 + 24h在线 +20 + 日均战报 × 5</strong><br><br>
                  评分等级：<strong style="color:#22c55e">≥100 核心成员</strong> ｜ <strong style="color:#3b82f6">≥50 活跃</strong> ｜ <strong style="color:#f59e0b">≥20 普通</strong> ｜ <strong style="color:#ef4444">&lt;20 不活跃</strong><br>
-                 翻地次数：本盟成员在土地/沃土上战胜其他同盟玩家的次数（不计入活跃度评分）<br>
+                 翻地次数：本盟成员占领其他同盟领地（土地/要塞，不含沃土）的次数，依据战报中的"占领了/拆除"描述统计（不计入活跃度评分）<br>
                  数据需要先同步成员（同盟成员页面）并抓取战报后才会更新
             </n-alert>
 
