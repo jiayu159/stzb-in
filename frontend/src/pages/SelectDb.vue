@@ -2,8 +2,8 @@
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { NCard, NButton, NEmpty, NSpin, NModal, NInput, useMessage } from 'naive-ui'
-import { GetDbList, SelectDb, CreateDb } from '../../wailsjs/go/main/App'
-import { Database, ChevronRight, RefreshCw, Plus } from 'lucide-vue-next'
+import { GetDbList, SelectDb, CreateDb, ImportDb } from '../../wailsjs/go/main/App'
+import { Database, ChevronRight, RefreshCw, Plus, Upload } from 'lucide-vue-next'
 
 const router = useRouter()
 const nmessage = useMessage()
@@ -15,6 +15,9 @@ const selectedName = ref('')
 const showCreateModal = ref(false)
 const newDbName = ref('')
 const creating = ref(false)
+
+const fileInput = ref(null)
+const importing = ref(false)
 
 const loadDbList = () => {
     loading.value = true
@@ -29,6 +32,40 @@ const loadDbList = () => {
         nmessage.error('获取数据库列表失败: ' + e)
     }).finally(() => {
         loading.value = false
+    })
+}
+
+const handleImportClick = () => {
+    if (fileInput.value) fileInput.value.click()
+}
+
+const handleFileSelected = (e) => {
+    const file = e.target.files && e.target.files[0]
+    e.target.value = ''
+    if (!file) return
+    if (!file.name.toLowerCase().endsWith('.db')) {
+        nmessage.warning('只支持导入 .db 数据库文件')
+        return
+    }
+    importing.value = true
+    file.arrayBuffer().then(buf => {
+        const data = new Uint8Array(buf)
+        ImportDb(file.name, Array.from(data)).then(v => {
+            let resp = JSON.parse(v)
+            if (resp.code == 200) {
+                nmessage.success(resp.msg)
+                loadDbList()
+            } else {
+                nmessage.error(resp.msg)
+            }
+        }).catch(err => {
+            nmessage.error('导入数据库失败: ' + err)
+        }).finally(() => {
+            importing.value = false
+        })
+    }).catch(err => {
+        importing.value = false
+        nmessage.error('读取文件失败: ' + err)
     })
 }
 
@@ -113,6 +150,11 @@ onMounted(() => {
                     <template #icon><Plus :size="14" /></template>
                     创建数据库
                 </n-button>
+                <n-button size="small" type="info" @click="handleImportClick" :loading="importing">
+                    <template #icon><Upload :size="14" /></template>
+                    导入数据库
+                </n-button>
+                <input ref="fileInput" type="file" accept=".db" style="display:none" @change="handleFileSelected" />
             </div>
 
             <n-card class="select-db-card" embedded :bordered="false">

@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -399,6 +400,57 @@ func (a *App) SelectDb(name string) string {
 	}
 	databaseSelected = true
 	return global.Response{Message: "数据库连接成功"}.Success()
+}
+
+// ImportDb 导入外部数据库文件到 exe 同目录（自动去除只读属性）
+func (a *App) ImportDb(name string, fileData []byte) string {
+	if name == "" {
+		return global.Response{Message: "文件名不能为空"}.Error()
+	}
+	if !strings.HasSuffix(strings.ToLower(name), ".db") {
+		return global.Response{Message: "只支持导入 .db 数据库文件"}.Error()
+	}
+	exePath, err := os.Executable()
+	if err != nil {
+		return global.Response{Message: "获取程序路径失败: " + err.Error()}.Error()
+	}
+	dir := filepath.Dir(exePath)
+	dstPath := filepath.Join(dir, name)
+
+	// 若目标已存在则不覆盖，提示用户
+	if _, err := os.Stat(dstPath); err == nil {
+		return global.Response{Message: "当前目录已存在同名数据库，请先删除或重命名后再导入"}.Error()
+	}
+
+	if err := os.WriteFile(dstPath, fileData, 0644); err != nil {
+		return global.Response{Message: "导入失败: " + err.Error()}.Error()
+	}
+
+	// 去除只读属性（外部来源文件常带只读标志，会导致程序无法写入）
+	if err := os.Chmod(dstPath, 0644); err != nil {
+		return global.Response{Message: "导入成功但清除只读属性失败: " + err.Error()}.Error()
+	}
+	// Windows 下额外清除只读位
+	if err := clearReadOnlyAttr(dstPath); err != nil {
+		log.Println("清除只读属性失败:", err)
+	}
+
+	model.InitDB(filepath.Join(dir, strings.TrimSuffix(name, ".db")))
+	if model.Conn == nil {
+		return global.Response{Message: "导入成功但连接失败，请检查数据库文件是否有效"}.Error()
+	}
+	databaseSelected = true
+	return global.Response{Message: "数据库导入成功"}.Success()
+}
+
+// clearReadOnlyAttr 通过 attrib 命令清除 Windows 只读属性
+func clearReadOnlyAttr(path string) error {
+	cmd := exec.Command("attrib", "-R", path)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s: %s", err.Error(), string(output))
+	}
+	return nil
 }
 
 // GetLogs 获取历史日志
