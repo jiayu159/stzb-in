@@ -2,7 +2,7 @@
 import { ref, onMounted, onUnmounted, watch, computed, h } from 'vue'
 import { NCard, NButton, NInput, NInputNumber, NEmpty, NSpin, NTag, NPagination, NSpace, NAlert, NDatePicker, NProgress, NStatistic, NModal, NCollapse, NCollapseItem, NSelect, NDataTable, useMessage } from 'naive-ui'
 import { EventsOn, EventsOff } from '../../wailsjs/runtime/runtime'
-import { GetBattleReports, ExportAllBattleReports, StartAutoScroll, StopAutoScroll, EnableCaptureRequests, DisableCaptureRequests, TestDirectFetch, DirectFetchLoop, DirectFetchStop, EnableGetBattleReport, DisableGetBattleReport, CheckAdb, GetMyUnionName } from '../../wailsjs/go/main/App'
+import { GetBattleReports, ExportAllBattleReports, StartAutoScroll, StopAutoScroll, EnableCaptureRequests, DisableCaptureRequests, TestDirectFetch, DirectFetchLoop, DirectFetchStop, EnableGetBattleReport, DisableGetBattleReport, GetBattleReportStatus, CheckAdb, GetMyUnionName } from '../../wailsjs/go/main/App'
 import { Search, Download, Play, Square, Timer, RefreshCw, HelpCircle, ChevronUp, ChevronDown } from 'lucide-vue-next'
 import { formatTimestamp } from '@/utils/format'
 import { storeToRefs } from 'pinia'
@@ -164,12 +164,11 @@ const startScroll = () => {
         return
     }
     const targetTs = Math.floor(scrollTargetTime.value / 1000)
-    const intervalMs = scrollInterval.value || 600
     scrollCount.value = 0
     scrollLatestTime.value = 0
     scrollReportCount.value = 0
     scrollProgress.value = {}
-    StartAutoScroll(targetTs, intervalMs).then(v => {
+    StartAutoScroll(targetTs, 3000).then(v => {
         let resp = JSON.parse(v)
         if (resp.code != 200) {
             nmessage.error(resp.msg)
@@ -179,7 +178,6 @@ const startScroll = () => {
     })
 }
 
-const scrollInterval = ref(600)
 const adbStatus = ref('')
 const adbChecking = ref(false)
 const adbConnected = ref(false)
@@ -223,6 +221,13 @@ const formatScrollTime = (ts) => {
 
 onMounted(() => {
     doSearch(1)
+    // 恢复详细战报开关的渲染状态（后端全局状态跨页面保留）
+    GetBattleReportStatus().then(v => {
+        let data = JSON.parse(v)
+        if (data.code == 200) {
+            battleReportEnabled.value = data.data === true
+        }
+    }).catch(() => {})
     // 恢复记住的同盟名，否则自动推断
     myUnion.value = localStorage.getItem('stzb_my_union') || ''
     if (!myUnion.value) {
@@ -440,10 +445,7 @@ onMounted(() => {
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                     <n-date-picker v-model:value="scrollTargetTime" type="datetime"
                         placeholder="请选择截止时间" clearable style="min-width:260px;" />
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="font-size:12px;opacity:0.7;">翻页间隔(ms)</span>
-                        <n-input-number v-model:value="scrollInterval" :min="1" :max="5000" :step="50" :style="{ width: '110px' }" />
-                    </div>
+                    <span style="font-size:12px;opacity:0.7;">滑动策略:1600ms 高敏滑动一次，等待 3 秒后继续</span>
                     <n-button type="success" @click="startScroll" icon-placement="right">
                         <template #icon><Play :size="16" /></template>
                         开始翻阅

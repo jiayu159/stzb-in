@@ -31,7 +31,7 @@ const exportExcel = () => {
         return
     }
     let data = []
-    data.push(['排名', '名称', '分组', '武勋', '势力', '进攻场次', '防守场次', '总场次', '加入天数', '最近参战', '24h在线', '活跃度', '活跃等级'])
+    data.push(['排名', '名称', '分组', '武勋', '势力', '进攻场次', '防守场次', '总场次', '翻地次数', '加入天数', '最近参战', '24h在线', '活跃度', '活跃等级'])
     members.value.forEach((m, i) => {
         const s = m.score || 0
         data.push([
@@ -43,6 +43,7 @@ const exportExcel = () => {
             m.atk_count || 0,
             m.def_count || 0,
             m.total_bat || 0,
+            m.land_count || 0,
             m.join_days || 0,
             formatTime(m.last_time),
             m.active_24h ? '在线' : '离线',
@@ -98,6 +99,11 @@ const columns = [
     { title: '进攻场次', key: 'atk_count', width: 90, align: 'center', sorter: (a, b) => a.atk_count - b.atk_count },
     { title: '防守场次', key: 'def_count', width: 90, align: 'center', sorter: (a, b) => a.def_count - b.def_count },
     { title: '总场次', key: 'total_bat', width: 80, align: 'center', sorter: (a, b) => a.total_bat - b.total_bat },
+    { title: '翻地次数', key: 'land_count', width: 90, align: 'center', sorter: (a, b) => a.land_count - b.land_count,
+        render: (row) => (row.land_count || 0) > 0
+            ? h(NTag, { type: 'success', size: 'tiny', bordered: false }, () => row.land_count)
+            : '0'
+    },
     { title: '加入天数', key: 'join_days', width: 80, align: 'center' },
     { title: '最近参战', key: 'last_time', width: 140,
         render: (row) => formatTime(row.last_time)
@@ -149,9 +155,10 @@ import { h } from 'vue'
             <n-alert type="info" :show-icon="true" closable style="border-radius: 8px; margin-bottom: 20px; font-size: 13px;">
                 <template #header>使用说明</template>
                 活跃度评分基于以下数据综合计算：<br>
-                <strong>战报数 × 0.4 + 武勋/1000 × 0.3 + 24h在线 +20 + 日均战报 × 5</strong><br><br>
-                评分等级：<strong style="color:#22c55e">≥100 核心成员</strong> ｜ <strong style="color:#3b82f6">≥50 活跃</strong> ｜ <strong style="color:#f59e0b">≥20 普通</strong> ｜ <strong style="color:#ef4444">&lt;20 不活跃</strong><br>
-                数据需要先同步成员（同盟成员页面）并抓取战报后才会更新
+                 <strong>战报数 × 0.4 + 武勋/1000 × 0.3 + 24h在线 +20 + 日均战报 × 5</strong><br><br>
+                 评分等级：<strong style="color:#22c55e">≥100 核心成员</strong> ｜ <strong style="color:#3b82f6">≥50 活跃</strong> ｜ <strong style="color:#f59e0b">≥20 普通</strong> ｜ <strong style="color:#ef4444">&lt;20 不活跃</strong><br>
+                 翻地次数：本盟成员在土地/沃土上战胜其他同盟玩家的次数（不计入活跃度评分）<br>
+                 数据需要先同步成员（同盟成员页面）并抓取战报后才会更新
             </n-alert>
 
             <n-grid :cols="4" :x-gap="16" :y-gap="16" style="margin-bottom: 20px;">

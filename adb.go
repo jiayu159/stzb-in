@@ -164,7 +164,7 @@ func adbShotSize() (int, int, error) {
 	return w, h, nil
 }
 
-// adbSwipeUp 从下往上滑动一页（高灵敏度：滑动距离更大、时长更短）
+// adbSwipeUp 从下往上滑动一页（高敏：1600ms 大距离滑动，保证战报列表完整翻页）
 func adbSwipeUp(w, h int) error {
 	device := findEmulatorDevice()
 	if device == "" {
@@ -174,7 +174,7 @@ func adbSwipeUp(w, h int) error {
 	y1 := int(float64(h) * 0.88)
 	y2 := int(float64(h) * 0.12)
 	_, err := adbRun("-s", device, "shell", "input", "swipe",
-		strconv.Itoa(x), strconv.Itoa(y1), strconv.Itoa(x), strconv.Itoa(y2), "100")
+		strconv.Itoa(x), strconv.Itoa(y1), strconv.Itoa(x), strconv.Itoa(y2), "1600")
 	return err
 }
 
@@ -206,7 +206,7 @@ func StopAdbScroll() {	adbStopMutex.Lock()
 }
 
 // StartAdbScroll adb 模式自动翻阅
-// targetTime: 截止时间戳(秒)，0=不限；intervalMs: 翻页间隔毫秒
+// targetTime: 截止时间戳(秒)，0=不限；intervalMs: 翻页间隔毫秒（固定策略：1600ms 高敏滑动一次，等待 3 秒后继续）
 // 与鼠标模式逻辑完全一致：翻页由 adb 注入滑动完成，战报判断/截止时间/进度均基于 npcap 抓包数据
 func StartAdbScroll(targetTime int64, intervalMs int64) {
 	if adbModeRunning {
@@ -219,13 +219,7 @@ func StartAdbScroll(targetTime int64, intervalMs int64) {
 		global.ExVar.NeedAdbScroll = false
 	}()
 
-	if intervalMs < 1 {
-		intervalMs = 1
-	}
-	if intervalMs > 5000 {
-		intervalMs = 5000
-	}
-	interval := time.Duration(intervalMs) * time.Millisecond
+	interval := 3 * time.Second
 
 	emit := func(event string, data interface{}) {
 		if global.AppCtx != nil {

@@ -269,6 +269,11 @@ func (a *App) DisableGetBattleReport() string {
 	return global.Response{Message: "关闭获取详细战报成功"}.Success()
 }
 
+// GetBattleReportStatus 获取详细战报开关的当前状态（切换页面后恢复渲染状态用）
+func (a *App) GetBattleReportStatus() string {
+	return global.Response{Data: global.ExVar.NeedGetBattleData}.Success()
+}
+
 // StartAutoScroll 开启模拟器(adb)自动翻阅（targetTime为Unix秒戳截止时间，0=不限；intervalMs为翻页间隔毫秒）
 func (a *App) StartAutoScroll(targetTime int64, intervalMs int64) string {
 	global.ExVar.NeedGetBattleData = true
@@ -1414,6 +1419,7 @@ func (a *App) GetMemberActivity() string {
 		AtkCount  int64   `json:"atk_count"`
 		DefCount  int64   `json:"def_count"`
 		TotalBat  int64   `json:"total_bat"`
+		LandCount int64   `json:"land_count"`
 		LastTime  int64   `json:"last_time"`
 		JoinDays  int64   `json:"join_days"`
 		Active24h bool    `json:"active_24h"`
@@ -1422,6 +1428,23 @@ func (a *App) GetMemberActivity() string {
 
 	var members []model.TeamUser
 	model.Conn.Find(&members)
+
+	// 翻地次数：本盟成员占领其他同盟领地（土地/沃土上的攻方胜利，防守方为其他同盟玩家）
+	myUnion := a.resolveMyUnion()
+	var landCounts []struct {
+		AttackName string
+		Cnt        int64
+	}
+	model.Conn.Raw(`SELECT attack_name, COUNT(*) AS cnt FROM battle_report
+		WHERE (wid_name LIKE '土地%' OR wid_name LIKE '沃土%')
+		AND attack_name IN (SELECT name FROM team_user WHERE name != '')
+		AND npc = 0 AND defend_union_name != '' AND defend_union_name != ?
+		AND result IN (1,2,3,4,10,18,19)
+		GROUP BY attack_name`, myUnion).Scan(&landCounts)
+	landMap := make(map[string]int64, len(landCounts))
+	for _, lc := range landCounts {
+		landMap[lc.AttackName] = lc.Cnt
+	}
 
 	cutoff := time.Now().Add(-24 * time.Hour).Unix()
 	now := time.Now().Unix()
@@ -1472,7 +1495,7 @@ func (a *App) GetMemberActivity() string {
 		results = append(results, ActivityItem{
 			Name: m.Name, Group: m.Group, Wu: m.Wu, Power: m.Power,
 			AtkCount: atkCount, DefCount: defCount, TotalBat: totalBat,
-			LastTime: lastTime, JoinDays: joinDays, Active24h: active24h, Score: score,
+			LandCount: landMap[m.Name], LastTime: lastTime, JoinDays: joinDays, Active24h: active24h, Score: score,
 		})
 	}
 

@@ -102,6 +102,10 @@ export function ExportTaskReport(arg1) {
   return window['go']['main']['App']['ExportTaskReport'](arg1);
 }
 
+export function GetBattleReportStatus() {
+  return window['go']['main']['App']['GetBattleReportStatus']();
+}
+
 export function GetBattleReports(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['GetBattleReports'](arg1, arg2, arg3, arg4, arg5, arg6);
 }

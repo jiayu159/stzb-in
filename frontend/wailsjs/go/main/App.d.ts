@@ -51,6 +51,8 @@ export function ExportAllBattleReports():Promise<string>;
 
 export function ExportTaskReport(arg1:number):Promise<string>;
 
+export function GetBattleReportStatus():Promise<string>;
+
 export function GetBattleReports(arg1:string,arg2:number,arg3:number,arg4:string,arg5:number,arg6:number):Promise<string>;
 
 export function GetDashboardStats():Promise<string>;
