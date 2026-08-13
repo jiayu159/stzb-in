@@ -164,17 +164,26 @@ func adbShotSize() (int, int, error) {
 	return w, h, nil
 }
 
-// adbSwipeUp 从下往上滑动一页（高敏：1600ms 大距离滑动，保证战报列表完整翻页）
-func adbSwipeUp(w, h int) error {
+// adbSwipeUp 从下往上滑动一页
+// durationMs: 滑动时长(ms)，不设限制；distance: 滑动距离(像素)
+func adbSwipeUp(w, h int, durationMs float64, distance int) error {
 	device := findEmulatorDevice()
 	if device == "" {
 		return fmt.Errorf("未检测到模拟器")
 	}
 	x := w / 2
-	y1 := int(float64(h) * 0.88)
-	y2 := int(float64(h) * 0.12)
+	y1 := int(float64(h) * 0.80)
+	y2 := y1 - distance
+	if y2 < 0 {
+		y2 = 0
+	}
+	dur := strconv.FormatFloat(durationMs, 'f', -1, 64)
+	if durationMs < 100 {
+		// 时长过短的滑动会被模拟器识别为点击，误入战报详情页，保底 100ms
+		dur = "100"
+	}
 	_, err := adbRun("-s", device, "shell", "input", "swipe",
-		strconv.Itoa(x), strconv.Itoa(y1), strconv.Itoa(x), strconv.Itoa(y2), "1600")
+		strconv.Itoa(x), strconv.Itoa(y1), strconv.Itoa(x), strconv.Itoa(y2), dur)
 	return err
 }
 
@@ -206,9 +215,10 @@ func StopAdbScroll() {	adbStopMutex.Lock()
 }
 
 // StartAdbScroll adb 模式自动翻阅
-// targetTime: 截止时间戳(秒)，0=不限；intervalMs: 翻页间隔毫秒（固定策略：1600ms 高敏滑动一次，等待 3 秒后继续）
+// targetTime: 截止时间戳(秒)，0=不限
+// swipeDurationMs: 滑动时长毫秒；swipeDistance: 滑动距离像素；waitMs: 每次滑动后等待毫秒（三个参数均不设上下限）
 // 与鼠标模式逻辑完全一致：翻页由 adb 注入滑动完成，战报判断/截止时间/进度均基于 npcap 抓包数据
-func StartAdbScroll(targetTime int64, intervalMs int64) {
+func StartAdbScroll(targetTime int64, swipeDurationMs float64, swipeDistance int, waitMs int64) {
 	if adbModeRunning {
 		log.Println("adb 自动翻阅已在运行中")
 		return
@@ -219,7 +229,10 @@ func StartAdbScroll(targetTime int64, intervalMs int64) {
 		global.ExVar.NeedAdbScroll = false
 	}()
 
-	interval := 3 * time.Second
+	if waitMs < 0 {
+		waitMs = 0
+	}
+	interval := time.Duration(waitMs) * time.Millisecond
 
 	emit := func(event string, data interface{}) {
 		if global.AppCtx != nil {
@@ -277,8 +290,8 @@ func StartAdbScroll(targetTime int64, intervalMs int64) {
 				return
 			}
 
-			// adb 注入滑动（从下往上）
-			if err := adbSwipeUp(w, h); err != nil {
+			// adb 注入滑动（从下往上，参数可调）
+			if err := adbSwipeUp(w, h, swipeDurationMs, swipeDistance); err != nil {
 				log.Printf("adb 滑动失败: %v\n", err)
 				emit("autoScrollError", "adb 滑动失败："+err.Error())
 				return

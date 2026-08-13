@@ -40,6 +40,10 @@ const showHelp = ref(false)
 
 // 自动翻阅（全局状态，切换页面不中断）
 const scrollTargetTime = ref(null)
+// adb 滑动参数（初始默认：0.5ms 内滑动 200px，等待 3s，均可调不限）
+const scrollSwipeDuration = ref(0.5)
+const scrollSwipeDistance = ref(200)
+const scrollWaitMs = ref(3000)
 
 // 请求分析（方案B：逆向客户端->服务器请求）
 const capturing = ref(false)
@@ -168,7 +172,7 @@ const startScroll = () => {
     scrollLatestTime.value = 0
     scrollReportCount.value = 0
     scrollProgress.value = {}
-    StartAutoScroll(targetTs, 3000).then(v => {
+    StartAutoScroll(targetTs, scrollSwipeDuration.value, scrollSwipeDistance.value, scrollWaitMs.value).then(v => {
         let resp = JSON.parse(v)
         if (resp.code != 200) {
             nmessage.error(resp.msg)
@@ -445,7 +449,18 @@ onMounted(() => {
                 <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
                     <n-date-picker v-model:value="scrollTargetTime" type="datetime"
                         placeholder="请选择截止时间" clearable style="min-width:260px;" />
-                    <span style="font-size:12px;opacity:0.7;">滑动策略:1600ms 高敏滑动一次，等待 3 秒后继续</span>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:12px;opacity:0.7;">滑动时长(ms)</span>
+                        <n-input-number v-model:value="scrollSwipeDuration" :step="0.5" :style="{ width: '100px' }" />
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:12px;opacity:0.7;">滑动距离(px)</span>
+                        <n-input-number v-model:value="scrollSwipeDistance" :step="50" :style="{ width: '100px' }" />
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="font-size:12px;opacity:0.7;">等待(ms)</span>
+                        <n-input-number v-model:value="scrollWaitMs" :step="100" :style="{ width: '100px' }" />
+                    </div>
                     <n-button type="success" @click="startScroll" icon-placement="right">
                         <template #icon><Play :size="16" /></template>
                         开始翻阅

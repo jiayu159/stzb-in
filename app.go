@@ -274,11 +274,12 @@ func (a *App) GetBattleReportStatus() string {
 	return global.Response{Data: global.ExVar.NeedGetBattleData}.Success()
 }
 
-// StartAutoScroll 开启模拟器(adb)自动翻阅（targetTime为Unix秒戳截止时间，0=不限；intervalMs为翻页间隔毫秒）
-func (a *App) StartAutoScroll(targetTime int64, intervalMs int64) string {
+// StartAutoScroll 开启模拟器(adb)自动翻阅
+// targetTime: Unix秒戳截止时间，0=不限；swipeDurationMs: 滑动时长毫秒；swipeDistance: 滑动距离像素；waitMs: 滑动后等待毫秒
+func (a *App) StartAutoScroll(targetTime int64, swipeDurationMs float64, swipeDistance int, waitMs int64) string {
 	global.ExVar.NeedGetBattleData = true
 	global.ExVar.NeedGetReport = false
-	go StartAdbScroll(targetTime, intervalMs)
+	go StartAdbScroll(targetTime, swipeDurationMs, swipeDistance, waitMs)
 	return global.Response{Message: "已开启模拟器自动翻阅"}.Success()
 }
 

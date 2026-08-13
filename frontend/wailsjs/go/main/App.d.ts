@@ -105,7 +105,7 @@ export function SelectDb(arg1:string):Promise<string>;
 
 export function SetAiThinking(arg1:boolean):Promise<string>;
 
-export function StartAutoScroll(arg1:number,arg2:number):Promise<string>;
+export function StartAutoScroll(arg1:number,arg2:number,arg3:number,arg4:number):Promise<string>;
 
 export function StatisticsReport(arg1:number):Promise<string>;
 
