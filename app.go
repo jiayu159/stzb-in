@@ -423,9 +423,11 @@ func (a *App) ImportDb(name string, fileData []byte) string {
 	dir := filepath.Dir(exePath)
 	dstPath := filepath.Join(dir, name)
 
-	// 若目标已存在则不覆盖，提示用户
+	// 若目标已存在则直接覆盖（先删除旧文件，避免残留旧表结构/只读属性）
 	if _, err := os.Stat(dstPath); err == nil {
-		return global.Response{Message: "当前目录已存在同名数据库，请先删除或重命名后再导入"}.Error()
+		if err := os.Remove(dstPath); err != nil {
+			return global.Response{Message: "覆盖失败，无法删除旧文件: " + err.Error()}.Error()
+		}
 	}
 
 	if err := os.WriteFile(dstPath, fileData, 0644); err != nil {

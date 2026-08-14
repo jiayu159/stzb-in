@@ -201,13 +201,13 @@ func executeAiQuery(sql string) (string, error) {
 
 // callAiOpenAI 调用大模型接口（思考模式跟随开关）
 func callAiOpenAI(messages []aiMessage) (string, error) {
+	if aiAPIKey == "" || aiAPIKey == "stzb" {
+		return "", fmt.Errorf("未配置 AI API Key，请在 ai.go 的 aiAPIKey 填入 Gitee AI 访问令牌(https://ai.gitee.com/dashboard/settings/tokens)")
+	}
 	payload := map[string]interface{}{
 		"model":    aiModelName,
 		"stream":   false,
 		"messages": messages,
-	}
-	if aiThinking {
-		payload["chat_template_kwargs"] = map[string]interface{}{"enable_thinking": true}
 	}
 	body, _ := json.Marshal(payload)
 
