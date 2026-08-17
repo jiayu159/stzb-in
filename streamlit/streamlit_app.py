@@ -282,18 +282,22 @@ elif page == "成员活跃度":
 
 elif page == "AI 小秘书":
     st.header("🤖 AI 小秘书")
+    # 注意: 不使用 st.chat_input/st.chat_message(存在 removeChild DOM 竞态 bug)，改用普通输入框
     if "ai_history" not in st.session_state:
         st.session_state.ai_history = []
-    for role, content in st.session_state.ai_history[-20:]:
-        with st.chat_message(role):
-            st.markdown(content)
-    q = st.chat_input("问点什么？例如：谁的武勋最高？张三的队伍配置？")
-    if q:
-        st.session_state.ai_history.append(("user", q))
-        with st.chat_message("user"):
-            st.markdown(q)
-        with st.chat_message("assistant"):
-            with st.spinner("思考中..."):
-                answer = ai_chat(q)
-            st.markdown(answer)
+    with st.form("ai_form", clear_on_submit=True):
+        q = st.text_input("问点什么?例如:谁的武勋最高?张三的队伍配置?", key="ai_q")
+        sent = st.form_submit_button("发送", type="primary")
+    if sent and q.strip():
+        st.session_state.ai_history.append(("user", q.strip()))
+        with st.spinner("思考中..."):
+            answer = ai_chat(q.strip())
         st.session_state.ai_history.append(("assistant", answer))
+
+    for role, content in st.session_state.ai_history[-20:]:
+        if role == "user":
+            st.markdown(f'<div style="text-align:right;background:#e8f0fe;border-radius:10px;'
+                        f'padding:8px 12px;margin:4px 0">{content}</div>', unsafe_allow_html=True)
+        else:
+            st.markdown(f'<div style="background:#f6f6f6;border-radius:10px;'
+                        f'padding:8px 12px;margin:4px 0">{content}</div>', unsafe_allow_html=True)
