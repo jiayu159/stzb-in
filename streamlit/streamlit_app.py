@@ -2,6 +2,7 @@ import sqlite3
 import os
 import json
 import re
+import urllib.request
 from datetime import datetime
 
 import streamlit as st
@@ -13,13 +14,92 @@ st.set_page_config(page_title="同盟数据查询", page_icon="🗡️", layout=
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "data.db"))
 
 
+class TursoCursor:
+    """Turso HTTP API 游标(模拟 DBAPI2 供 pandas.read_sql_query 使用)"""
+
+    def __init__(self):
+        self.description = []
+        self.rows = []
+        self.rowcount = -1
+        self._i = 0
+
+    def fetchall(self):
+        return self.rows
+
+    def fetchmany(self, size):
+        r = self.rows[:size]
+        self.rows = self.rows[size:]
+        return r
+
+    def fetchone(self):
+        if self._i >= len(self.rows):
+            return None
+        r = self.rows[self._i]
+        self._i += 1
+        return r
+
+    def close(self):
+        pass
+
+
+class TursoConnection:
+    """基于标准库 urllib 的 Turso(Hrana over HTTP) 连接，零第三方依赖"""
+
+    def __init__(self, url, token):
+        self.url = url.replace("libsql://", "https://").rstrip("/")
+        self.token = token
+
+    @staticmethod
+    def _lit(v):
+        if v is None:
+            return "NULL"
+        if isinstance(v, int):
+            return str(v)
+        if isinstance(v, float):
+            return repr(v)
+        if isinstance(v, bool):
+            return "1" if v else "0"
+        return "'" + str(v).replace("'", "''") + "'"
+
+    def execute(self, sql, params=None):
+        if params:
+            parts = str(sql).split("?")
+            sql = parts[0]
+            for p, rest in zip(params, parts[1:]):
+                sql += self._lit(p) + rest
+        body = json.dumps({"requests": [{"type": "execute", "stmt": {"sql": sql}}], "batches": []}).encode()
+        req = urllib.request.Request(self.url + "/v2/pipeline", data=body, method="POST",
+                                     headers={"Authorization": "Bearer " + self.token,
+                                              "Content-Type": "application/json"})
+        with urllib.request.urlopen(req) as resp:
+            out = json.loads(resp.read())
+        res = out["results"][0]
+        cur = TursoCursor()
+        if res.get("type") == "error":
+            raise RuntimeError(res.get("error", {}).get("message", "Turso error"))
+        result = res["response"]["result"]
+        cur.description = [(c["name"], None, None, None, None, None, None) for c in result["cols"]]
+        cur.rows = [tuple(None if isinstance(v, dict) and v.get("type") == "null" else v.get("value", v)
+                          for v in row) for row in result["rows"]]
+        cur.rowcount = result.get("affected_row_count", -1)
+        return cur
+
+    def commit(self):
+        pass
+
+    def rollback(self):
+        pass
+
+    def close(self):
+        pass
+
+
 def get_conn():
     # 优先云端 Turso 实时库(secrets 配置 TURSO_URL/TURSO_TOKEN)，否则本地文件
     turso_url = st.secrets.get("TURSO_URL", "")
     turso_token = st.secrets.get("TURSO_TOKEN", "")
     if turso_url and turso_token:
-        import libsql_experimental as libsql
-        return libsql.connect(turso_url, auth_token=turso_token)
+        return TursoConnection(turso_url, turso_token)
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
