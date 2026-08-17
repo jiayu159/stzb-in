@@ -384,6 +384,7 @@ func (a *App) CreateDb(name string) string {
 	}
 	dir := filepath.Dir(exePath)
 	dbPath := filepath.Join(dir, name)
+	global.CurrentDbName = strings.TrimSuffix(name, ".db")
 
 	model.InitDB(dbPath)
 	if model.Conn == nil {
@@ -401,6 +402,7 @@ func (a *App) SelectDb(name string) string {
 	}
 	dir := filepath.Dir(exePath)
 	dbPath := filepath.Join(dir, name)
+	global.CurrentDbName = strings.TrimSuffix(name, ".db")
 
 	model.InitDB(dbPath)
 	if model.Conn == nil {
@@ -445,6 +447,7 @@ func (a *App) ImportDb(name string, fileData []byte) string {
 		log.Println("清除只读属性失败:", err)
 	}
 
+	global.CurrentDbName = strings.TrimSuffix(name, ".db")
 	model.InitDB(filepath.Join(dir, strings.TrimSuffix(name, ".db")))
 	if model.Conn == nil {
 		return global.Response{Message: "导入成功但连接失败，请检查数据库文件是否有效"}.Error()

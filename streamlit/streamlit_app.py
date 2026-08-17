@@ -268,6 +268,19 @@ def team_card_html(row):
         )
     return f"<div style='display:flex;gap:8px;padding:8px;border:1px solid #ddd;border-radius:10px;margin:6px 0'>{''.join(cells)}</div>"
 
+
+def format_ts(ts):
+    """时间戳安全格式化(兼容字符串/None/非法值)，与桌面 formatTime 一致"""
+    if ts is None or ts == "":
+        return ""
+    try:
+        t = int(ts)
+    except (TypeError, ValueError):
+        return ""
+    if t <= 0:
+        return ""
+    return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
+
 @st.cache_data(ttl=10, show_spinner=False)
 def query_member_teams(min_hp=0, name=""):
     """同盟成员常用队伍：每名成员出现次数最多的一个队伍"""
@@ -504,7 +517,7 @@ elif page == "同盟成员常用队伍":
         st.success(f"共 {len(df)} 名成员")
         show = st.session_state.get("mt_show", 20)
         for _, row in df.head(show).iterrows():
-            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 使用 {row['team_count']} 次 · 最近 {pd.to_datetime(row['last_time'], unit='s')}"
+            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 使用 {row['team_count']} 次 · 最近 {format_ts(row['last_time'])}"
             st.markdown(header)
             st.markdown(team_card_html(row), unsafe_allow_html=True)
         if show < len(df):
@@ -531,7 +544,7 @@ elif page == "敌军队伍":
         st.success(f"共 {len(df)} 支队伍")
         show = st.session_state.get("et_show", 20)
         for _, row in df.head(show).iterrows():
-            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 交战 {row['encounter_count']} 次 · 最近 {pd.to_datetime(row['last_time'], unit='s')}"
+            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 交战 {row['encounter_count']} 次 · 最近 {format_ts(row['last_time'])}"
             st.markdown(header)
             st.markdown(team_card_html(row), unsafe_allow_html=True)
         if show < len(df):

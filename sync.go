@@ -23,8 +23,9 @@ import (
 // 原理: 每张表按主键游标增量读取本地记录，通过 Hrana over HTTP 批量 INSERT OR REPLACE 到 Turso
 
 type tursoConfig struct {
-	URL   string `json:"url"`
-	Token string `json:"token"`
+	URL       string `json:"url"`
+	Token     string `json:"token"`
+	AllowedDb string `json:"allowedDb"` // 可选: 允许同步的数据库文件名(不含 .db)，防止别人用此配置把其他库数据推入
 }
 
 type syncTable struct {
@@ -75,6 +76,19 @@ func initSync() {
 	syncCfg = cfg
 	// Hrana over HTTP 需要 https 端点，libsql:// 前缀自动转换
 	syncCfg.URL = strings.Replace(syncCfg.URL, "libsql://", "https://", 1)
+	// 数据库绑定校验: 配置了 allowedDb 且当前库名不匹配时禁止同步
+	// (防止把程序发给别人后，其数据误入本库)
+	if syncCfg.AllowedDb != "" {
+		cur := strings.TrimSuffix(global.CurrentDbName, ".db")
+		if cur == "" {
+			log.Println("同步器: 数据库未打开，云同步等待")
+			return
+		}
+		if !strings.Contains(cur, syncCfg.AllowedDb) {
+			log.Printf("同步器: 当前数据库 %q 与配置允许的 %q 不匹配，云同步已禁用", cur, syncCfg.AllowedDb)
+			return
+		}
+	}
 	syncEnabled = true
 	log.Printf("同步器: 已启用，目标 %s", syncCfg.URL)
 }

@@ -35,3 +35,4 @@ var LossBytes []byte
 var LossCmdId = 0
 var NeedBufSize = 0
 var AppCtx context.Context
+var CurrentDbName string // 当前打开的数据库文件名(不含 .db 后缀)，用于云同步绑定校验
