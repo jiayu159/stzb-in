@@ -49,6 +49,10 @@ export function EnableGetReport(arg1:number,arg2:number):Promise<string>;
 
 export function ExportAllBattleReports():Promise<string>;
 
+export function ExportAllEnemyTeams(arg1:number):Promise<string>;
+
+export function ExportAllMemberTeams(arg1:number):Promise<string>;
+
 export function ExportTaskReport(arg1:number):Promise<string>;
 
 export function GetBattleReportStatus():Promise<string>;

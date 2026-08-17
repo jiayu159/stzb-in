@@ -98,6 +98,14 @@ export function ExportAllBattleReports() {
   return window['go']['main']['App']['ExportAllBattleReports']();
 }
 
+export function ExportAllEnemyTeams(arg1) {
+  return window['go']['main']['App']['ExportAllEnemyTeams'](arg1);
+}
+
+export function ExportAllMemberTeams(arg1) {
+  return window['go']['main']['App']['ExportAllMemberTeams'](arg1);
+}
+
 export function ExportTaskReport(arg1) {
   return window['go']['main']['App']['ExportTaskReport'](arg1);
 }

@@ -40,10 +40,10 @@ const showHelp = ref(false)
 
 // 自动翻阅（全局状态，切换页面不中断）
 const scrollTargetTime = ref(null)
-// adb 滑动参数（初始默认：0.5ms 内滑动 200px，等待 3s，均可调不限）
-const scrollSwipeDuration = ref(0.5)
-const scrollSwipeDistance = ref(200)
-const scrollWaitMs = ref(3000)
+// adb 滑动参数（初始默认：滑动时长 200ms、滑动距离 1000px、等待 1000ms，均可调不限）
+const scrollSwipeDuration = ref(200)
+const scrollSwipeDistance = ref(1000)
+const scrollWaitMs = ref(1000)
 
 // 请求分析（方案B：逆向客户端->服务器请求）
 const capturing = ref(false)
@@ -465,6 +465,12 @@ onMounted(() => {
                         <template #icon><Play :size="16" /></template>
                         开始翻阅
                     </n-button>
+                </div>
+                <div style="font-size:12px;opacity:0.7;margin-top:8px;line-height:1.8;">
+                    <b>参数含义（调快/调慢）：</b><br>
+                    · <b>等待(ms)</b>＝每次滑动后的停顿时间，是控制速度的关键：<span style="color:#18a058;">调小（如 1000）翻得更快</span>，调大（如 5000）翻得更慢更稳。<br>
+                    · <b>滑动时长(ms)</b>＝手指滑动的快慢：值越小滑动越轻快，但<b>低于 100 会被模拟器当成点击</b>（误入战报详情），程序会自动按 100 执行。<br>
+                    · <b>滑动距离(px)</b>＝每次翻页移动的像素，默认 200px 约翻一页；调大（如 400）一次翻更多，调小（如 100）更细腻。
                 </div>
             </n-alert>
 

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 import { NCard, NButton, NInput, NInputNumber, NEmpty, NSpin, NPagination, useMessage } from 'naive-ui'
-import { GetPlayerTeam, GetUnionMemberTopTeams, GetDefeatedEnemyTeams } from '../../wailsjs/go/main/App'
+import { GetPlayerTeam, GetUnionMemberTopTeams, GetDefeatedEnemyTeams, ExportAllMemberTeams, ExportAllEnemyTeams } from '../../wailsjs/go/main/App'
 import { Search, Swords, Image, Download } from 'lucide-vue-next'
 import TeamCard from '../components/TeamCard.vue'
 import * as XLSX from 'xlsx'
@@ -123,53 +123,73 @@ const formatTime = (ts) => {
 const roleLabel = (role) => role === 'attack' ? '进攻' : '防守'
 
 const exportMemberTeams = () => {
-    if (memberResults.value.length === 0) {
-        nmessage.warning('没有数据可导出')
-        return
-    }
-    const data = [['成员', '使用次数', '队伍(武将)', '队伍(战法)', '红度', '兵力', '最近出战时间', '角色']]
-    memberResults.value.forEach(r => {
-        data.push([
-            r.player_name,
-            r.team_count,
-            [heroName(r.hero1_id), heroName(r.hero2_id), heroName(r.hero3_id)].join(' / '),
-            r.all_skill_info || '',
-            r.total_star,
-            r.hp,
-            formatTime(r.last_time),
-            roleLabel(r.role),
-        ])
+    ExportAllMemberTeams(memberMinHp.value).then(v => {
+        let resp = JSON.parse(v)
+        if (resp.code != 200) {
+            nmessage.error(resp.msg)
+            return
+        }
+        const allData = resp.data || []
+        if (allData.length === 0) {
+            nmessage.warning('没有数据可导出')
+            return
+        }
+        const data = [['成员', '使用次数', '队伍(武将)', '队伍(战法)', '红度', '兵力', '最近出战时间', '角色']]
+        allData.forEach(r => {
+            data.push([
+                r.player_name,
+                r.team_count,
+                [heroName(r.hero1_id), heroName(r.hero2_id), heroName(r.hero3_id)].join(' / '),
+                r.all_skill_info || '',
+                r.total_star,
+                r.hp,
+                formatTime(r.last_time),
+                roleLabel(r.role),
+            ])
+        })
+        const ws = XLSX.utils.aoa_to_sheet(data)
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, '同盟成员常用队伍')
+        XLSX.writeFile(wb, `同盟成员常用队伍_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
+        nmessage.success(`导出成功，共 ${allData.length} 条`)
+    }).catch(e => {
+        nmessage.error('导出失败: ' + e)
     })
-    const ws = XLSX.utils.aoa_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '同盟成员常用队伍')
-    XLSX.writeFile(wb, `同盟成员常用队伍_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
-    nmessage.success(`导出成功，共 ${memberResults.value.length} 条`)
 }
 
 const exportEnemyTeams = () => {
-    if (enemyResults.value.length === 0) {
-        nmessage.warning('没有数据可导出')
-        return
-    }
-    const data = [['玩家', '战败次数', '队伍(武将)', '队伍(战法)', '红度', '兵力', '最近出战时间', '角色']]
-    enemyResults.value.forEach(r => {
-        data.push([
-            r.player_name,
-            r.loss_count,
-            [heroName(r.hero1_id), heroName(r.hero2_id), heroName(r.hero3_id)].join(' / '),
-            r.all_skill_info || '',
-            r.total_star,
-            r.hp,
-            formatTime(r.last_time),
-            roleLabel(r.role),
-        ])
+    ExportAllEnemyTeams(enemyMinHp.value).then(v => {
+        let resp = JSON.parse(v)
+        if (resp.code != 200) {
+            nmessage.error(resp.msg)
+            return
+        }
+        const allData = resp.data || []
+        if (allData.length === 0) {
+            nmessage.warning('没有数据可导出')
+            return
+        }
+        const data = [['玩家', '战败次数', '队伍(武将)', '队伍(战法)', '红度', '兵力', '最近出战时间', '角色']]
+        allData.forEach(r => {
+            data.push([
+                r.player_name,
+                r.loss_count,
+                [heroName(r.hero1_id), heroName(r.hero2_id), heroName(r.hero3_id)].join(' / '),
+                r.all_skill_info || '',
+                r.total_star,
+                r.hp,
+                formatTime(r.last_time),
+                roleLabel(r.role),
+            ])
+        })
+        const ws = XLSX.utils.aoa_to_sheet(data)
+        const wb = XLSX.utils.book_new()
+        XLSX.utils.book_append_sheet(wb, ws, '战败敌军队伍')
+        XLSX.writeFile(wb, `战败敌军队伍_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
+        nmessage.success(`导出成功，共 ${allData.length} 条`)
+    }).catch(e => {
+        nmessage.error('导出失败: ' + e)
     })
-    const ws = XLSX.utils.aoa_to_sheet(data)
-    const wb = XLSX.utils.book_new()
-    XLSX.utils.book_append_sheet(wb, ws, '战败敌军队伍')
-    XLSX.writeFile(wb, `战败敌军队伍_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
-    nmessage.success(`导出成功，共 ${enemyResults.value.length} 条`)
 }
 
 onMounted(() => {
@@ -299,7 +319,7 @@ const groupedResults = () => {
             <div class="sub-section">
                 <div class="sub-header">
                     <h3 class="sub-title">战败的非己方同盟人员队伍</h3>
-                    <p class="sub-desc">统计己方同盟战报中战败的非己方同盟人员队伍（含武将和战法），按战败次数递减排序</p>
+                    <p class="sub-desc">统计己方同盟战报中战败的非己方同盟人员队伍（含武将和战法），过滤无归属（无同盟）对象，按战败次数递减排序</p>
                     <div class="sub-tools">
                         <n-input-number v-model:value="enemyMinHp" :min="0" :max="99999" :step="1000" placeholder="兵力过滤" :style="{ width: '140px' }" @keyup.enter="loadEnemyTeams(1)" />
                         <n-button type="primary" size="small" @click="loadEnemyTeams(1)" :loading="enemyLoading">
