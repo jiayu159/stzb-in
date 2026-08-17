@@ -427,6 +427,7 @@ func parseBattleData(data []byte) {
 				log.Printf("保存战斗报告失败: %v", result.Error)
 			} else {
 				battleCount++
+				NotifySync()
 			}
 		}
 
@@ -681,6 +682,7 @@ func parseReport(data []byte) {
 		if len(neededreports) > 0 {
 			action := model.Conn.Save(&neededreports)
 			fmt.Println("数据库共新增" + strconv.Itoa(int(action.RowsAffected)) + "条战报")
+			NotifySync()
 		}
 
 		// 推送到前端（用于实时显示抓取进度）
@@ -698,6 +700,7 @@ func parseReport(data []byte) {
 		if global.ExVar.NeedAutoListenReport {
 			action := model.Conn.Save(&reports)
 			fmt.Println("自动监听: 新增" + strconv.Itoa(int(action.RowsAffected)) + "条战报")
+			NotifySync()
 		}
 	} else {
 		log.Println("解析同盟战报消息失败")
@@ -725,6 +728,7 @@ func parseTeamUser(data []byte) {
 		log.Println("同盟成员消息解析成功！共" + strconv.Itoa(len(teamUsers)) + "人")
 		model.Conn.Save(teamUsers)
 		model.Conn.Not("id", ids).Delete(model.TeamUser{})
+		NotifySync()
 	} else {
 		log.Println("解析同盟成员消息失败")
 	}

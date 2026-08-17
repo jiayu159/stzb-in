@@ -37,6 +37,8 @@ func (a *App) startup(ctx context.Context) {
 	global.LogW.SetContext(ctx)
 	// 恢复直连缓存(握手帧/初始化帧/批量帧/请求模板)，避免重启后需重新滚动捕获
 	loadFetchCache()
+	// 启动云数据库增量同步循环(读取 exe 同目录 turso.json，未配置则静默禁用)
+	StartSyncLoop()
 }
 
 // Greet returns a greeting for the given name

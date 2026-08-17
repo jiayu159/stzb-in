@@ -83,6 +83,8 @@ export function GetReportNumByTaskId(arg1:number):Promise<string>;
 
 export function GetSiegeSummary():Promise<string>;
 
+export function GetSyncStatus():Promise<string>;
+
 export function GetTask(arg1:number):Promise<string>;
 
 export function GetTaskList():Promise<string>;

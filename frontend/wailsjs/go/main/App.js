@@ -166,6 +166,10 @@ export function GetSiegeSummary() {
   return window['go']['main']['App']['GetSiegeSummary']();
 }
 
+export function GetSyncStatus() {
+  return window['go']['main']['App']['GetSyncStatus']();
+}
+
 export function GetTask(arg1) {
   return window['go']['main']['App']['GetTask'](arg1);
 }
