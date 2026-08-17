@@ -128,7 +128,145 @@ def resolve_my_union(conn):
     return row[0] if row else ""
 
 
-# ---------- 查询函数 ----------
+# ---------- 数据配置(与桌面版 cfg.js 同步) ----------
+
+import os as _os
+
+_cfg_dir = _os.path.dirname(__file__)
+
+def _load_cfg(name):
+    try:
+        with open(_os.path.join(_cfg_dir, name), encoding="utf-8") as f:
+            return json.load(f)
+    except Exception:
+        return {}
+
+hero_cfg = _load_cfg("hero_cfg.json")
+skill_cfg = _load_cfg("skill_cfg.json")
+gear_feature_cfg = _load_cfg("gear_feature_cfg.json")
+gear_cfg = {str(g.get("gear_id")): g for g in _load_cfg("gear_cfg.json")}
+
+
+def resolve_hero_id(hid):
+    if not hid:
+        return hid
+    try:
+        n = int(hid)
+    except (TypeError, ValueError):
+        return hid
+    return n - 30000 if n >= 130000 else n
+
+
+def hero_name(hid):
+    if not hid:
+        return ""
+    h = hero_cfg.get(str(resolve_hero_id(hid)))
+    return h.get("name", "") if h else f"未知({hid})"
+
+
+def hero_icon_url(hid):
+    if not hid:
+        return ""
+    h = hero_cfg.get(str(resolve_hero_id(hid)))
+    icon = h.get("iconId") if h else hid
+    return f"https://g0.gph.netease.com/ngsocial/community/stzb/cn/cards/cut/card_small_{icon}.jpg?gameid=g10"
+
+
+def skill_name(sid):
+    if not sid or str(sid) == "0":
+        return ""
+    s = skill_cfg.get(str(sid))
+    return s.get("name", "") if s else f"未知({sid})"
+
+
+def gear_name(gid):
+    if not gid or str(gid) == "0":
+        return ""
+    g = gear_cfg.get(str(gid))
+    return g.get("name", "") if g else f"未知({gid})"
+
+
+def gear_entry_name(eid):
+    if not eid or str(eid) == "0":
+        return ""
+    e = gear_feature_cfg.get(str(eid))
+    return e.get("name", "") if e else f"未知({eid})"
+
+
+def team_role(all_skill_info):
+    """根据技能索引判断攻守: 1-3 进攻, 4-6 防守"""
+    try:
+        idx = int(str(all_skill_info).split(";")[0].split(",")[0])
+        return "defend" if idx >= 4 else "attack"
+    except (ValueError, IndexError, AttributeError):
+        return "attack"
+
+
+def parse_skills(all_skill_info):
+    """解析 all_skill_info: '1,id,lv,id,lv,id,lv;...' -> 每武将 [战法名...]，与桌面版一致"""
+    if not all_skill_info:
+        return []
+    role = team_role(all_skill_info)
+    groups = [g for g in str(all_skill_info).split(";") if g.strip()]
+    parsed = []
+    for g in groups:
+        parts = g.split(",")
+        if len(parts) < 7:
+            continue
+        try:
+            idx = int(parts[0])
+        except ValueError:
+            continue
+        if role == "attack" and not (1 <= idx <= 3):
+            continue
+        if role == "defend" and not (4 <= idx <= 6):
+            continue
+        parsed.append([skill_name(parts[1]), skill_name(parts[3]), skill_name(parts[5])])
+    if role == "defend":
+        parsed.reverse()
+    return parsed
+
+
+def parse_gears(gear_info):
+    """解析宝物: 'gearId,level,entryId;...' -> 每武将 [宝物名]，防守方倒序"""
+    if not gear_info:
+        return []
+    role = team_role(gear_info) if ";" in str(gear_info) else "attack"
+    groups = [g for g in str(gear_info).split(";") if g.strip()]
+    parsed = []
+    for g in groups:
+        parts = g.split(",")
+        if not parts[0] or parts[0] == "0":
+            parsed.append("")
+            continue
+        name = gear_name(parts[0])
+        if len(parts) > 2 and parts[2] and parts[2] != "0":
+            name += f"[{gear_entry_name(parts[2])}]"
+        parsed.append(name)
+    if role == "defend":
+        parsed.reverse()
+    return parsed
+
+
+def team_card_html(row):
+    """把一行队伍渲染成 HTML 卡片(头像+武将名+战法+宝物)，与桌面 TeamCard 一致"""
+    skills = parse_skills(row.get("all_skill_info"))
+    gears = parse_gears(row.get("gear_info"))
+    hero_ids = [row.get(f"h{i}") for i in (1, 2, 3)]
+    cells = []
+    for i, hid in enumerate(hero_ids):
+        if not hid or str(hid) == "0":
+            cells.append("<div style='width:200px;text-align:center;color:#999'>?</div>")
+            continue
+        sk = "".join(f"<div style='font-size:11px;color:#444'>{n}</div>" for n in (skills[i] if i < len(skills) else []))
+        gs = (gears[i] if i < len(gears) else "") or ""
+        gd = f"<div style='font-size:11px;color:#b8860b'>宝物: {gs}</div>" if gs else ""
+        cells.append(
+            f"<div style='width:200px;text-align:center'>"
+            f"<img src='{hero_icon_url(hid)}' style='width:56px;height:56px;object-fit:cover;border-radius:8px' onerror=\"this.style.display='none'\">"
+            f"<div style='font-weight:600'>{hero_name(hid)}</div>{sk}{gd}</div>"
+        )
+    return f"<div style='display:flex;gap:8px;padding:8px;border:1px solid #ddd;border-radius:10px;margin:6px 0'>{''.join(cells)}</div>"
 
 @st.cache_data(ttl=10, show_spinner=False)
 def query_member_teams(min_hp=0, name=""):
@@ -145,7 +283,8 @@ def query_member_teams(min_hp=0, name=""):
         SELECT attack_name AS player_name, attack_hero1_id AS h1, attack_hero2_id AS h2, attack_hero3_id AS h3,
                attack_hero1_level AS l1, attack_hero2_level AS l2, attack_hero3_level AS l3,
                attack_hero1_star AS s1, attack_hero2_star AS s2, attack_hero3_star AS s3,
-               attack_total_star AS total_star, attack_hp AS hp, time, all_skill_info
+               attack_total_star AS total_star, attack_hp AS hp, time, all_skill_info,
+               attacker_gear_info AS gear_info
         FROM battle_report
         WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
           {name_cond}
@@ -156,7 +295,8 @@ def query_member_teams(min_hp=0, name=""):
         SELECT defend_name, defend_hero1_id, defend_hero2_id, defend_hero3_id,
                defend_hero1_level, defend_hero2_level, defend_hero3_level,
                defend_hero1_star, defend_hero2_star, defend_hero3_star,
-               defend_total_star, defend_hp, time, all_skill_info
+               defend_total_star, defend_hp, time, all_skill_info,
+               defender_gear_info
         FROM battle_report
         WHERE defend_name IN (SELECT name FROM team_user WHERE name != '')
           {name_cond2}
@@ -167,14 +307,14 @@ def query_member_teams(min_hp=0, name=""):
     team_counts AS (
         SELECT player_name, h1, h2, h3, COUNT(*) AS team_count,
                MAX(total_star) AS total_star, MAX(hp) AS hp, MAX(time) AS last_time,
-               MAX(all_skill_info) AS all_skill_info
+               MAX(all_skill_info) AS all_skill_info, MAX(gear_info) AS gear_info
         FROM member_rows GROUP BY player_name, h1, h2, h3
     ),
     ranked AS (
         SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY team_count DESC, last_time DESC) AS rn
         FROM team_counts
     )
-    SELECT player_name, h1, h2, h3, total_star, hp, team_count, last_time, all_skill_info
+    SELECT player_name, h1, h2, h3, total_star, hp, team_count, last_time, all_skill_info, gear_info
     FROM ranked WHERE rn = 1 ORDER BY player_name"""
     return pd.read_sql_query(sql, conn, params=params)
 
@@ -196,7 +336,8 @@ def query_enemy_teams(min_hp=0, name=""):
     sql = f"""
     WITH enemy_encounters AS (
         SELECT defend_name AS player_name, defend_hero1_id AS h1, defend_hero2_id AS h2, defend_hero3_id AS h3,
-               defend_total_star AS total_star, defend_hp AS hp, time, all_skill_info
+               defend_total_star AS total_star, defend_hp AS hp, time, all_skill_info,
+               defender_gear_info AS gear_info
         FROM battle_report
         WHERE attack_union_name = ?
           AND defend_name NOT IN (SELECT name FROM team_user WHERE name != '')
@@ -206,7 +347,8 @@ def query_enemy_teams(min_hp=0, name=""):
           AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
         UNION ALL
         SELECT attack_name, attack_hero1_id, attack_hero2_id, attack_hero3_id,
-               attack_total_star, attack_hp, time, all_skill_info
+               attack_total_star, attack_hp, time, all_skill_info,
+               attacker_gear_info
         FROM battle_report
         WHERE defend_union_name = ?
           AND attack_name NOT IN (SELECT name FROM team_user WHERE name != '')
@@ -216,7 +358,7 @@ def query_enemy_teams(min_hp=0, name=""):
           AND attack_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
     )
     SELECT player_name, h1, h2, h3, total_star, hp, COUNT(*) AS encounter_count, MAX(time) AS last_time,
-           MAX(all_skill_info) AS all_skill_info
+           MAX(all_skill_info) AS all_skill_info, MAX(gear_info) AS gear_info
     FROM enemy_encounters GROUP BY player_name, h1, h2, h3
     ORDER BY encounter_count DESC"""
     return pd.read_sql_query(sql, conn, params=params)
@@ -355,14 +497,24 @@ elif page == "同盟成员常用队伍":
     if st.button("查询", type="primary"):
         with st.spinner("查询中..."):
             df = query_member_teams(int(min_hp), name.strip())
+        st.session_state["mt_df"] = df
+        st.session_state["mt_show"] = 20
+    if "mt_df" in st.session_state and len(st.session_state["mt_df"]):
+        df = st.session_state["mt_df"]
         st.success(f"共 {len(df)} 名成员")
-        df_disp = df.copy()
-        df_disp["武将"] = df_disp["h1"].astype(str) + " / " + df_disp["h2"].astype(str) + " / " + df_disp["h3"].astype(str)
-        df_disp["最近出战"] = pd.to_datetime(df_disp["last_time"], unit="s")
-        st.dataframe(df_disp[["player_name", "武将", "total_star", "hp", "team_count", "最近出战"]].rename(
-            columns={"player_name": "成员", "total_star": "红度", "hp": "兵力", "team_count": "使用次数"}),
-            use_container_width=True, hide_index=True)
-        st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
+        show = st.session_state.get("mt_show", 20)
+        for _, row in df.head(show).iterrows():
+            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 使用 {row['team_count']} 次 · 最近 {pd.to_datetime(row['last_time'], unit='s')}"
+            st.markdown(header)
+            st.markdown(team_card_html(row), unsafe_allow_html=True)
+        if show < len(df):
+            if st.button(f"显示更多(剩余 {len(df) - show})"):
+                st.session_state["mt_show"] = show + 50
+        csv = df.copy()
+        csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
+        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"])), axis=1)
+        st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
 
 elif page == "敌军队伍":
     st.header("敌军队伍")
@@ -372,13 +524,24 @@ elif page == "敌军队伍":
     if st.button("查询", type="primary"):
         with st.spinner("查询中..."):
             df = query_enemy_teams(int(min_hp), name.strip())
+        st.session_state["et_df"] = df
+        st.session_state["et_show"] = 20
+    if "et_df" in st.session_state and len(st.session_state["et_df"]):
+        df = st.session_state["et_df"]
         st.success(f"共 {len(df)} 支队伍")
-        df_disp = df.copy()
-        df_disp["武将"] = df_disp["h1"].astype(str) + " / " + df_disp["h2"].astype(str) + " / " + df_disp["h3"].astype(str)
-        st.dataframe(df_disp[["player_name", "武将", "total_star", "hp", "encounter_count"]].rename(
-            columns={"player_name": "玩家", "total_star": "红度", "hp": "兵力", "encounter_count": "交战次数"}),
-            use_container_width=True, hide_index=True)
-        st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
+        show = st.session_state.get("et_show", 20)
+        for _, row in df.head(show).iterrows():
+            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 交战 {row['encounter_count']} 次 · 最近 {pd.to_datetime(row['last_time'], unit='s')}"
+            st.markdown(header)
+            st.markdown(team_card_html(row), unsafe_allow_html=True)
+        if show < len(df):
+            if st.button(f"显示更多(剩余 {len(df) - show})"):
+                st.session_state["et_show"] = show + 50
+        csv = df.copy()
+        csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
+        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"])), axis=1)
+        st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
 
 elif page == "成员活跃度":
     st.header("成员活跃度与翻地次数")

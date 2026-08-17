@@ -1,0 +1,5343 @@
+{
+    "10101": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10101,
+        "name": "骁锐",
+        "quality": 1
+    },
+    "10102": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10102,
+        "name": "骁锐",
+        "quality": 2
+    },
+    "10103": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10103,
+        "name": "骁锐",
+        "quality": 3
+    },
+    "10104": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10104,
+        "name": "骁锐",
+        "quality": 4
+    },
+    "10105": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10105,
+        "name": "骁锐",
+        "quality": 5
+    },
+    "10106": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10106,
+        "name": "骁锐",
+        "quality": 6
+    },
+    "10107": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10107,
+        "name": "骁锐",
+        "quality": 7
+    },
+    "10108": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10108,
+        "name": "骁锐",
+        "quality": 8
+    },
+    "10109": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10109,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "10110": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10110,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "10111": {
+        "advance": 1,
+        "gear_type": 1,
+        "id": 10111,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "10201": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10201,
+        "name": "陷阵",
+        "quality": 1
+    },
+    "10202": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10202,
+        "name": "陷阵",
+        "quality": 2
+    },
+    "10203": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10203,
+        "name": "陷阵",
+        "quality": 3
+    },
+    "10204": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10204,
+        "name": "陷阵",
+        "quality": 4
+    },
+    "10205": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10205,
+        "name": "陷阵",
+        "quality": 5
+    },
+    "10206": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10206,
+        "name": "陷阵",
+        "quality": 6
+    },
+    "10207": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10207,
+        "name": "陷阵",
+        "quality": 7
+    },
+    "10208": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10208,
+        "name": "陷阵",
+        "quality": 8
+    },
+    "10209": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10209,
+        "name": "陷阵",
+        "quality": 9
+    },
+    "10210": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10210,
+        "name": "陷阵",
+        "quality": 9
+    },
+    "10211": {
+        "advance": 1,
+        "gear_type": 1,
+        "id": 10211,
+        "name": "陷阵",
+        "quality": 9
+    },
+    "10301": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10301,
+        "name": "强击",
+        "quality": 2
+    },
+    "10302": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10302,
+        "name": "强击",
+        "quality": 4
+    },
+    "10303": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10303,
+        "name": "强击",
+        "quality": 6
+    },
+    "10304": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10304,
+        "name": "强击",
+        "quality": 9
+    },
+    "10305": {
+        "advance": 1,
+        "gear_type": 1,
+        "id": 10305,
+        "name": "强击",
+        "quality": 9
+    },
+    "10306": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10306,
+        "name": "强击",
+        "quality": 3
+    },
+    "10307": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10307,
+        "name": "强击",
+        "quality": 5
+    },
+    "10308": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10308,
+        "name": "强击",
+        "quality": 7
+    },
+    "10309": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10309,
+        "name": "强击",
+        "quality": 8
+    },
+    "10401": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10401,
+        "name": "奔袭",
+        "quality": 3
+    },
+    "10402": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10402,
+        "name": "奔袭",
+        "quality": 4
+    },
+    "10403": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10403,
+        "name": "奔袭",
+        "quality": 6
+    },
+    "10404": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10404,
+        "name": "奔袭",
+        "quality": 7
+    },
+    "10405": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10405,
+        "name": "奔袭",
+        "quality": 8
+    },
+    "10406": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10406,
+        "name": "奔袭",
+        "quality": 9
+    },
+    "10407": {
+        "advance": 1,
+        "gear_type": 1,
+        "id": 10407,
+        "name": "奔袭",
+        "quality": 9
+    },
+    "10501": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10501,
+        "name": "坚毅",
+        "quality": 3
+    },
+    "10502": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10502,
+        "name": "坚毅",
+        "quality": 5
+    },
+    "10503": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10503,
+        "name": "坚毅",
+        "quality": 7
+    },
+    "10504": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10504,
+        "name": "坚毅",
+        "quality": 9
+    },
+    "10505": {
+        "advance": 1,
+        "gear_type": 1,
+        "id": 10505,
+        "name": "坚毅",
+        "quality": 9
+    },
+    "10506": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10506,
+        "name": "坚毅",
+        "quality": 2
+    },
+    "10507": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10507,
+        "name": "坚毅",
+        "quality": 4
+    },
+    "10508": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10508,
+        "name": "坚毅",
+        "quality": 6
+    },
+    "10509": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10509,
+        "name": "坚毅",
+        "quality": 8
+    },
+    "10601": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10601,
+        "name": "无畏",
+        "quality": 1
+    },
+    "10602": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10602,
+        "name": "无畏",
+        "quality": 2
+    },
+    "10603": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10603,
+        "name": "无畏",
+        "quality": 3
+    },
+    "10604": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10604,
+        "name": "无畏",
+        "quality": 4
+    },
+    "10605": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10605,
+        "name": "无畏",
+        "quality": 5
+    },
+    "10606": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10606,
+        "name": "无畏",
+        "quality": 6
+    },
+    "10607": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10607,
+        "name": "无畏",
+        "quality": 7
+    },
+    "10608": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10608,
+        "name": "无畏",
+        "quality": 8
+    },
+    "10609": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10609,
+        "name": "无畏",
+        "quality": 9
+    },
+    "10610": {
+        "advance": 0,
+        "gear_type": 1,
+        "id": 10610,
+        "name": "无畏",
+        "quality": 9
+    },
+    "10611": {
+        "advance": 1,
+        "gear_type": 1,
+        "id": 10611,
+        "name": "无畏",
+        "quality": 9
+    },
+    "20101": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20101,
+        "name": "骁锐",
+        "quality": 1
+    },
+    "20102": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20102,
+        "name": "骁锐",
+        "quality": 2
+    },
+    "20103": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20103,
+        "name": "骁锐",
+        "quality": 3
+    },
+    "20104": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20104,
+        "name": "骁锐",
+        "quality": 4
+    },
+    "20105": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20105,
+        "name": "骁锐",
+        "quality": 5
+    },
+    "20106": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20106,
+        "name": "骁锐",
+        "quality": 6
+    },
+    "20107": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20107,
+        "name": "骁锐",
+        "quality": 7
+    },
+    "20108": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20108,
+        "name": "骁锐",
+        "quality": 8
+    },
+    "20109": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20109,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "20110": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20110,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "20111": {
+        "advance": 1,
+        "gear_type": 2,
+        "id": 20111,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "20201": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20201,
+        "name": "至策",
+        "quality": 1
+    },
+    "20202": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20202,
+        "name": "至策",
+        "quality": 2
+    },
+    "20203": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20203,
+        "name": "至策",
+        "quality": 3
+    },
+    "20204": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20204,
+        "name": "至策",
+        "quality": 4
+    },
+    "20205": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20205,
+        "name": "至策",
+        "quality": 5
+    },
+    "20206": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20206,
+        "name": "至策",
+        "quality": 6
+    },
+    "20207": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20207,
+        "name": "至策",
+        "quality": 7
+    },
+    "20208": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20208,
+        "name": "至策",
+        "quality": 8
+    },
+    "20209": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20209,
+        "name": "至策",
+        "quality": 9
+    },
+    "20210": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20210,
+        "name": "至策",
+        "quality": 9
+    },
+    "20211": {
+        "advance": 1,
+        "gear_type": 2,
+        "id": 20211,
+        "name": "至策",
+        "quality": 9
+    },
+    "20301": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20301,
+        "name": "破敌",
+        "quality": 1
+    },
+    "20302": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20302,
+        "name": "破敌",
+        "quality": 2
+    },
+    "20303": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20303,
+        "name": "破敌",
+        "quality": 3
+    },
+    "20304": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20304,
+        "name": "破敌",
+        "quality": 4
+    },
+    "20305": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20305,
+        "name": "破敌",
+        "quality": 5
+    },
+    "20306": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20306,
+        "name": "破敌",
+        "quality": 6
+    },
+    "20307": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20307,
+        "name": "破敌",
+        "quality": 7
+    },
+    "20308": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20308,
+        "name": "破敌",
+        "quality": 8
+    },
+    "20309": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20309,
+        "name": "破敌",
+        "quality": 9
+    },
+    "20310": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20310,
+        "name": "破敌",
+        "quality": 9
+    },
+    "20311": {
+        "advance": 1,
+        "gear_type": 2,
+        "id": 20311,
+        "name": "破敌",
+        "quality": 9
+    },
+    "20401": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20401,
+        "name": "英勇",
+        "quality": 1
+    },
+    "20402": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20402,
+        "name": "英勇",
+        "quality": 2
+    },
+    "20403": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20403,
+        "name": "英勇",
+        "quality": 3
+    },
+    "20404": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20404,
+        "name": "英勇",
+        "quality": 4
+    },
+    "20405": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20405,
+        "name": "英勇",
+        "quality": 5
+    },
+    "20406": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20406,
+        "name": "英勇",
+        "quality": 6
+    },
+    "20407": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20407,
+        "name": "英勇",
+        "quality": 7
+    },
+    "20408": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20408,
+        "name": "英勇",
+        "quality": 8
+    },
+    "20409": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20409,
+        "name": "英勇",
+        "quality": 9
+    },
+    "20410": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20410,
+        "name": "英勇",
+        "quality": 9
+    },
+    "20411": {
+        "advance": 1,
+        "gear_type": 2,
+        "id": 20411,
+        "name": "英勇",
+        "quality": 9
+    },
+    "20501": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20501,
+        "name": "善谋",
+        "quality": 1
+    },
+    "20502": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20502,
+        "name": "善谋",
+        "quality": 2
+    },
+    "20503": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20503,
+        "name": "善谋",
+        "quality": 3
+    },
+    "20504": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20504,
+        "name": "善谋",
+        "quality": 4
+    },
+    "20505": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20505,
+        "name": "善谋",
+        "quality": 5
+    },
+    "20506": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20506,
+        "name": "善谋",
+        "quality": 6
+    },
+    "20507": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20507,
+        "name": "善谋",
+        "quality": 7
+    },
+    "20508": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20508,
+        "name": "善谋",
+        "quality": 8
+    },
+    "20509": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20509,
+        "name": "善谋",
+        "quality": 9
+    },
+    "20510": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20510,
+        "name": "善谋",
+        "quality": 9
+    },
+    "20511": {
+        "advance": 1,
+        "gear_type": 2,
+        "id": 20511,
+        "name": "善谋",
+        "quality": 9
+    },
+    "20601": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20601,
+        "name": "坚忍",
+        "quality": 1
+    },
+    "20602": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20602,
+        "name": "坚忍",
+        "quality": 2
+    },
+    "20603": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20603,
+        "name": "坚忍",
+        "quality": 3
+    },
+    "20604": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20604,
+        "name": "坚忍",
+        "quality": 4
+    },
+    "20605": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20605,
+        "name": "坚忍",
+        "quality": 5
+    },
+    "20606": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20606,
+        "name": "坚忍",
+        "quality": 6
+    },
+    "20607": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20607,
+        "name": "坚忍",
+        "quality": 7
+    },
+    "20608": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20608,
+        "name": "坚忍",
+        "quality": 8
+    },
+    "20609": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20609,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "20610": {
+        "advance": 0,
+        "gear_type": 2,
+        "id": 20610,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "20611": {
+        "advance": 1,
+        "gear_type": 2,
+        "id": 20611,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "30101": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30101,
+        "name": "灵动",
+        "quality": 1
+    },
+    "30102": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30102,
+        "name": "灵动",
+        "quality": 2
+    },
+    "30103": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30103,
+        "name": "灵动",
+        "quality": 3
+    },
+    "30104": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30104,
+        "name": "灵动",
+        "quality": 4
+    },
+    "30105": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30105,
+        "name": "灵动",
+        "quality": 5
+    },
+    "30106": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30106,
+        "name": "灵动",
+        "quality": 6
+    },
+    "30107": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30107,
+        "name": "灵动",
+        "quality": 7
+    },
+    "30108": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30108,
+        "name": "灵动",
+        "quality": 8
+    },
+    "30109": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30109,
+        "name": "灵动",
+        "quality": 9
+    },
+    "30110": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30110,
+        "name": "灵动",
+        "quality": 9
+    },
+    "30111": {
+        "advance": 1,
+        "gear_type": 3,
+        "id": 30111,
+        "name": "灵动",
+        "quality": 9
+    },
+    "30201": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30201,
+        "name": "机敏",
+        "quality": 4
+    },
+    "30202": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30202,
+        "name": "机敏",
+        "quality": 5
+    },
+    "30203": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30203,
+        "name": "机敏",
+        "quality": 6
+    },
+    "30204": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30204,
+        "name": "机敏",
+        "quality": 7
+    },
+    "30205": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30205,
+        "name": "机敏",
+        "quality": 8
+    },
+    "30206": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30206,
+        "name": "机敏",
+        "quality": 9
+    },
+    "30207": {
+        "advance": 1,
+        "gear_type": 3,
+        "id": 30207,
+        "name": "机敏",
+        "quality": 9
+    },
+    "30301": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30301,
+        "name": "清毅",
+        "quality": 2
+    },
+    "30302": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30302,
+        "name": "清毅",
+        "quality": 5
+    },
+    "30303": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30303,
+        "name": "清毅",
+        "quality": 9
+    },
+    "30304": {
+        "advance": 1,
+        "gear_type": 3,
+        "id": 30304,
+        "name": "清毅",
+        "quality": 9
+    },
+    "30305": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30305,
+        "name": "清毅",
+        "quality": 3
+    },
+    "30306": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30306,
+        "name": "清毅",
+        "quality": 4
+    },
+    "30307": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30307,
+        "name": "清毅",
+        "quality": 8
+    },
+    "30308": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30308,
+        "name": "清毅",
+        "quality": 8
+    },
+    "30401": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30401,
+        "name": "仁心",
+        "quality": 1
+    },
+    "30402": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30402,
+        "name": "仁心",
+        "quality": 2
+    },
+    "30403": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30403,
+        "name": "仁心",
+        "quality": 3
+    },
+    "30404": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30404,
+        "name": "仁心",
+        "quality": 4
+    },
+    "30405": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30405,
+        "name": "仁心",
+        "quality": 5
+    },
+    "30406": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30406,
+        "name": "仁心",
+        "quality": 6
+    },
+    "30407": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30407,
+        "name": "仁心",
+        "quality": 7
+    },
+    "30408": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30408,
+        "name": "仁心",
+        "quality": 8
+    },
+    "30409": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30409,
+        "name": "仁心",
+        "quality": 9
+    },
+    "30410": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30410,
+        "name": "仁心",
+        "quality": 9
+    },
+    "30411": {
+        "advance": 1,
+        "gear_type": 3,
+        "id": 30411,
+        "name": "仁心",
+        "quality": 9
+    },
+    "30501": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30501,
+        "name": "坚忍",
+        "quality": 1
+    },
+    "30502": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30502,
+        "name": "坚忍",
+        "quality": 2
+    },
+    "30503": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30503,
+        "name": "坚忍",
+        "quality": 3
+    },
+    "30504": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30504,
+        "name": "坚忍",
+        "quality": 4
+    },
+    "30505": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30505,
+        "name": "坚忍",
+        "quality": 5
+    },
+    "30506": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30506,
+        "name": "坚忍",
+        "quality": 6
+    },
+    "30507": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30507,
+        "name": "坚忍",
+        "quality": 7
+    },
+    "30508": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30508,
+        "name": "坚忍",
+        "quality": 8
+    },
+    "30509": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30509,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "30510": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30510,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "30511": {
+        "advance": 1,
+        "gear_type": 3,
+        "id": 30511,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "30601": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30601,
+        "name": "艮止",
+        "quality": 1
+    },
+    "30602": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30602,
+        "name": "艮止",
+        "quality": 2
+    },
+    "30603": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30603,
+        "name": "艮止",
+        "quality": 3
+    },
+    "30604": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30604,
+        "name": "艮止",
+        "quality": 4
+    },
+    "30605": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30605,
+        "name": "艮止",
+        "quality": 5
+    },
+    "30606": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30606,
+        "name": "艮止",
+        "quality": 6
+    },
+    "30607": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30607,
+        "name": "艮止",
+        "quality": 7
+    },
+    "30608": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30608,
+        "name": "艮止",
+        "quality": 8
+    },
+    "30609": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30609,
+        "name": "艮止",
+        "quality": 9
+    },
+    "30610": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30610,
+        "name": "艮止",
+        "quality": 9
+    },
+    "30611": {
+        "advance": 1,
+        "gear_type": 3,
+        "id": 30611,
+        "name": "艮止",
+        "quality": 9
+    },
+    "30701": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30701,
+        "name": "惑言",
+        "quality": 2
+    },
+    "30702": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30702,
+        "name": "惑言",
+        "quality": 5
+    },
+    "30703": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30703,
+        "name": "惑言",
+        "quality": 9
+    },
+    "30704": {
+        "advance": 1,
+        "gear_type": 3,
+        "id": 30704,
+        "name": "惑言",
+        "quality": 9
+    },
+    "30705": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30705,
+        "name": "惑言",
+        "quality": 3
+    },
+    "30706": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30706,
+        "name": "惑言",
+        "quality": 4
+    },
+    "30707": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30707,
+        "name": "惑言",
+        "quality": 8
+    },
+    "30708": {
+        "advance": 0,
+        "gear_type": 3,
+        "id": 30708,
+        "name": "惑言",
+        "quality": 8
+    },
+    "40101": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40101,
+        "name": "骁锐",
+        "quality": 1
+    },
+    "40102": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40102,
+        "name": "骁锐",
+        "quality": 2
+    },
+    "40103": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40103,
+        "name": "骁锐",
+        "quality": 3
+    },
+    "40104": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40104,
+        "name": "骁锐",
+        "quality": 4
+    },
+    "40105": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40105,
+        "name": "骁锐",
+        "quality": 5
+    },
+    "40106": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40106,
+        "name": "骁锐",
+        "quality": 6
+    },
+    "40107": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40107,
+        "name": "骁锐",
+        "quality": 7
+    },
+    "40108": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40108,
+        "name": "骁锐",
+        "quality": 8
+    },
+    "40109": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40109,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "40110": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40110,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "40111": {
+        "advance": 1,
+        "gear_type": 4,
+        "id": 40111,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "40201": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40201,
+        "name": "天资",
+        "quality": 1
+    },
+    "40202": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40202,
+        "name": "天资",
+        "quality": 2
+    },
+    "40203": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40203,
+        "name": "天资",
+        "quality": 3
+    },
+    "40204": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40204,
+        "name": "天资",
+        "quality": 4
+    },
+    "40205": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40205,
+        "name": "天资",
+        "quality": 5
+    },
+    "40206": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40206,
+        "name": "天资",
+        "quality": 6
+    },
+    "40207": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40207,
+        "name": "天资",
+        "quality": 7
+    },
+    "40208": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40208,
+        "name": "天资",
+        "quality": 8
+    },
+    "40209": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40209,
+        "name": "天资",
+        "quality": 9
+    },
+    "40210": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40210,
+        "name": "天资",
+        "quality": 9
+    },
+    "40211": {
+        "advance": 1,
+        "gear_type": 4,
+        "id": 40211,
+        "name": "天资",
+        "quality": 9
+    },
+    "40301": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40301,
+        "name": "筹算",
+        "quality": 1
+    },
+    "40302": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40302,
+        "name": "筹算",
+        "quality": 2
+    },
+    "40303": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40303,
+        "name": "筹算",
+        "quality": 3
+    },
+    "40304": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40304,
+        "name": "筹算",
+        "quality": 4
+    },
+    "40305": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40305,
+        "name": "筹算",
+        "quality": 5
+    },
+    "40306": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40306,
+        "name": "筹算",
+        "quality": 6
+    },
+    "40307": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40307,
+        "name": "筹算",
+        "quality": 7
+    },
+    "40308": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40308,
+        "name": "筹算",
+        "quality": 8
+    },
+    "40309": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40309,
+        "name": "筹算",
+        "quality": 9
+    },
+    "40310": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40310,
+        "name": "筹算",
+        "quality": 9
+    },
+    "40311": {
+        "advance": 1,
+        "gear_type": 4,
+        "id": 40311,
+        "name": "筹算",
+        "quality": 9
+    },
+    "40401": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40401,
+        "name": "识破",
+        "quality": 2
+    },
+    "40402": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40402,
+        "name": "识破",
+        "quality": 5
+    },
+    "40403": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40403,
+        "name": "识破",
+        "quality": 9
+    },
+    "40404": {
+        "advance": 1,
+        "gear_type": 4,
+        "id": 40404,
+        "name": "识破",
+        "quality": 9
+    },
+    "40405": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40405,
+        "name": "识破",
+        "quality": 3
+    },
+    "40406": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40406,
+        "name": "识破",
+        "quality": 4
+    },
+    "40407": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40407,
+        "name": "识破",
+        "quality": 8
+    },
+    "40408": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40408,
+        "name": "识破",
+        "quality": 8
+    },
+    "40501": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40501,
+        "name": "亢厉",
+        "quality": 1
+    },
+    "40502": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40502,
+        "name": "亢厉",
+        "quality": 2
+    },
+    "40503": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40503,
+        "name": "亢厉",
+        "quality": 3
+    },
+    "40504": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40504,
+        "name": "亢厉",
+        "quality": 4
+    },
+    "40505": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40505,
+        "name": "亢厉",
+        "quality": 5
+    },
+    "40506": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40506,
+        "name": "亢厉",
+        "quality": 6
+    },
+    "40507": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40507,
+        "name": "亢厉",
+        "quality": 7
+    },
+    "40508": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40508,
+        "name": "亢厉",
+        "quality": 8
+    },
+    "40509": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40509,
+        "name": "亢厉",
+        "quality": 9
+    },
+    "40510": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40510,
+        "name": "亢厉",
+        "quality": 9
+    },
+    "40511": {
+        "advance": 1,
+        "gear_type": 4,
+        "id": 40511,
+        "name": "亢厉",
+        "quality": 9
+    },
+    "40601": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40601,
+        "name": "英勇",
+        "quality": 1
+    },
+    "40602": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40602,
+        "name": "英勇",
+        "quality": 2
+    },
+    "40603": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40603,
+        "name": "英勇",
+        "quality": 3
+    },
+    "40604": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40604,
+        "name": "英勇",
+        "quality": 4
+    },
+    "40605": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40605,
+        "name": "英勇",
+        "quality": 5
+    },
+    "40606": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40606,
+        "name": "英勇",
+        "quality": 6
+    },
+    "40607": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40607,
+        "name": "英勇",
+        "quality": 7
+    },
+    "40608": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40608,
+        "name": "英勇",
+        "quality": 8
+    },
+    "40609": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40609,
+        "name": "英勇",
+        "quality": 9
+    },
+    "40610": {
+        "advance": 0,
+        "gear_type": 4,
+        "id": 40610,
+        "name": "英勇",
+        "quality": 9
+    },
+    "40611": {
+        "advance": 1,
+        "gear_type": 4,
+        "id": 40611,
+        "name": "英勇",
+        "quality": 9
+    },
+    "50101": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50101,
+        "name": "灵动",
+        "quality": 1
+    },
+    "50102": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50102,
+        "name": "灵动",
+        "quality": 2
+    },
+    "50103": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50103,
+        "name": "灵动",
+        "quality": 3
+    },
+    "50104": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50104,
+        "name": "灵动",
+        "quality": 4
+    },
+    "50105": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50105,
+        "name": "灵动",
+        "quality": 5
+    },
+    "50106": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50106,
+        "name": "灵动",
+        "quality": 6
+    },
+    "50107": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50107,
+        "name": "灵动",
+        "quality": 7
+    },
+    "50108": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50108,
+        "name": "灵动",
+        "quality": 8
+    },
+    "50109": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50109,
+        "name": "灵动",
+        "quality": 9
+    },
+    "50110": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50110,
+        "name": "灵动",
+        "quality": 9
+    },
+    "50111": {
+        "advance": 1,
+        "gear_type": 5,
+        "id": 50111,
+        "name": "灵动",
+        "quality": 9
+    },
+    "50201": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50201,
+        "name": "天资",
+        "quality": 1
+    },
+    "50202": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50202,
+        "name": "天资",
+        "quality": 2
+    },
+    "50203": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50203,
+        "name": "天资",
+        "quality": 3
+    },
+    "50204": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50204,
+        "name": "天资",
+        "quality": 4
+    },
+    "50205": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50205,
+        "name": "天资",
+        "quality": 5
+    },
+    "50206": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50206,
+        "name": "天资",
+        "quality": 6
+    },
+    "50207": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50207,
+        "name": "天资",
+        "quality": 7
+    },
+    "50208": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50208,
+        "name": "天资",
+        "quality": 8
+    },
+    "50209": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50209,
+        "name": "天资",
+        "quality": 9
+    },
+    "50210": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50210,
+        "name": "天资",
+        "quality": 9
+    },
+    "50211": {
+        "advance": 1,
+        "gear_type": 5,
+        "id": 50211,
+        "name": "天资",
+        "quality": 9
+    },
+    "50301": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50301,
+        "name": "颖悟",
+        "quality": 1
+    },
+    "50302": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50302,
+        "name": "颖悟",
+        "quality": 2
+    },
+    "50303": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50303,
+        "name": "颖悟",
+        "quality": 3
+    },
+    "50304": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50304,
+        "name": "颖悟",
+        "quality": 4
+    },
+    "50305": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50305,
+        "name": "颖悟",
+        "quality": 5
+    },
+    "50306": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50306,
+        "name": "颖悟",
+        "quality": 6
+    },
+    "50307": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50307,
+        "name": "颖悟",
+        "quality": 7
+    },
+    "50308": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50308,
+        "name": "颖悟",
+        "quality": 8
+    },
+    "50309": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50309,
+        "name": "颖悟",
+        "quality": 9
+    },
+    "50310": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50310,
+        "name": "颖悟",
+        "quality": 9
+    },
+    "50311": {
+        "advance": 1,
+        "gear_type": 5,
+        "id": 50311,
+        "name": "颖悟",
+        "quality": 9
+    },
+    "50401": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50401,
+        "name": "驱火",
+        "quality": 1
+    },
+    "50402": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50402,
+        "name": "驱火",
+        "quality": 2
+    },
+    "50403": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50403,
+        "name": "驱火",
+        "quality": 3
+    },
+    "50404": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50404,
+        "name": "驱火",
+        "quality": 4
+    },
+    "50405": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50405,
+        "name": "驱火",
+        "quality": 5
+    },
+    "50406": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50406,
+        "name": "驱火",
+        "quality": 6
+    },
+    "50407": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50407,
+        "name": "驱火",
+        "quality": 7
+    },
+    "50408": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50408,
+        "name": "驱火",
+        "quality": 8
+    },
+    "50409": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50409,
+        "name": "驱火",
+        "quality": 9
+    },
+    "50410": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50410,
+        "name": "驱火",
+        "quality": 9
+    },
+    "50411": {
+        "advance": 1,
+        "gear_type": 5,
+        "id": 50411,
+        "name": "驱火",
+        "quality": 9
+    },
+    "50501": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50501,
+        "name": "炫惑",
+        "quality": 1
+    },
+    "50502": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50502,
+        "name": "炫惑",
+        "quality": 2
+    },
+    "50503": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50503,
+        "name": "炫惑",
+        "quality": 3
+    },
+    "50504": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50504,
+        "name": "炫惑",
+        "quality": 4
+    },
+    "50505": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50505,
+        "name": "炫惑",
+        "quality": 5
+    },
+    "50506": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50506,
+        "name": "炫惑",
+        "quality": 6
+    },
+    "50507": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50507,
+        "name": "炫惑",
+        "quality": 7
+    },
+    "50508": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50508,
+        "name": "炫惑",
+        "quality": 8
+    },
+    "50509": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50509,
+        "name": "炫惑",
+        "quality": 9
+    },
+    "50510": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50510,
+        "name": "炫惑",
+        "quality": 9
+    },
+    "50511": {
+        "advance": 1,
+        "gear_type": 5,
+        "id": 50511,
+        "name": "炫惑",
+        "quality": 9
+    },
+    "50601": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50601,
+        "name": "筹算",
+        "quality": 1
+    },
+    "50602": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50602,
+        "name": "筹算",
+        "quality": 2
+    },
+    "50603": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50603,
+        "name": "筹算",
+        "quality": 3
+    },
+    "50604": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50604,
+        "name": "筹算",
+        "quality": 4
+    },
+    "50605": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50605,
+        "name": "筹算",
+        "quality": 5
+    },
+    "50606": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50606,
+        "name": "筹算",
+        "quality": 6
+    },
+    "50607": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50607,
+        "name": "筹算",
+        "quality": 7
+    },
+    "50608": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50608,
+        "name": "筹算",
+        "quality": 8
+    },
+    "50609": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50609,
+        "name": "筹算",
+        "quality": 9
+    },
+    "50610": {
+        "advance": 0,
+        "gear_type": 5,
+        "id": 50610,
+        "name": "筹算",
+        "quality": 9
+    },
+    "50611": {
+        "advance": 1,
+        "gear_type": 5,
+        "id": 50611,
+        "name": "筹算",
+        "quality": 9
+    },
+    "60101": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60101,
+        "name": "熟虑",
+        "quality": 1
+    },
+    "60102": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60102,
+        "name": "熟虑",
+        "quality": 2
+    },
+    "60103": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60103,
+        "name": "熟虑",
+        "quality": 3
+    },
+    "60104": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60104,
+        "name": "熟虑",
+        "quality": 4
+    },
+    "60105": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60105,
+        "name": "熟虑",
+        "quality": 5
+    },
+    "60106": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60106,
+        "name": "熟虑",
+        "quality": 6
+    },
+    "60107": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60107,
+        "name": "熟虑",
+        "quality": 7
+    },
+    "60108": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60108,
+        "name": "熟虑",
+        "quality": 8
+    },
+    "60109": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60109,
+        "name": "熟虑",
+        "quality": 9
+    },
+    "60110": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60110,
+        "name": "熟虑",
+        "quality": 9
+    },
+    "60111": {
+        "advance": 1,
+        "gear_type": 6,
+        "id": 60111,
+        "name": "熟虑",
+        "quality": 9
+    },
+    "60201": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60201,
+        "name": "天资",
+        "quality": 1
+    },
+    "60202": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60202,
+        "name": "天资",
+        "quality": 2
+    },
+    "60203": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60203,
+        "name": "天资",
+        "quality": 3
+    },
+    "60204": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60204,
+        "name": "天资",
+        "quality": 4
+    },
+    "60205": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60205,
+        "name": "天资",
+        "quality": 5
+    },
+    "60206": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60206,
+        "name": "天资",
+        "quality": 6
+    },
+    "60207": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60207,
+        "name": "天资",
+        "quality": 7
+    },
+    "60208": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60208,
+        "name": "天资",
+        "quality": 8
+    },
+    "60209": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60209,
+        "name": "天资",
+        "quality": 9
+    },
+    "60210": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60210,
+        "name": "天资",
+        "quality": 9
+    },
+    "60211": {
+        "advance": 1,
+        "gear_type": 6,
+        "id": 60211,
+        "name": "天资",
+        "quality": 9
+    },
+    "60301": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60301,
+        "name": "亢厉",
+        "quality": 1
+    },
+    "60302": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60302,
+        "name": "亢厉",
+        "quality": 2
+    },
+    "60303": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60303,
+        "name": "亢厉",
+        "quality": 3
+    },
+    "60304": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60304,
+        "name": "亢厉",
+        "quality": 4
+    },
+    "60305": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60305,
+        "name": "亢厉",
+        "quality": 5
+    },
+    "60306": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60306,
+        "name": "亢厉",
+        "quality": 6
+    },
+    "60307": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60307,
+        "name": "亢厉",
+        "quality": 7
+    },
+    "60308": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60308,
+        "name": "亢厉",
+        "quality": 8
+    },
+    "60309": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60309,
+        "name": "亢厉",
+        "quality": 9
+    },
+    "60310": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60310,
+        "name": "亢厉",
+        "quality": 9
+    },
+    "60311": {
+        "advance": 1,
+        "gear_type": 6,
+        "id": 60311,
+        "name": "亢厉",
+        "quality": 9
+    },
+    "60401": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60401,
+        "name": "至策",
+        "quality": 1
+    },
+    "60402": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60402,
+        "name": "至策",
+        "quality": 2
+    },
+    "60403": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60403,
+        "name": "至策",
+        "quality": 3
+    },
+    "60404": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60404,
+        "name": "至策",
+        "quality": 4
+    },
+    "60405": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60405,
+        "name": "至策",
+        "quality": 5
+    },
+    "60406": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60406,
+        "name": "至策",
+        "quality": 6
+    },
+    "60407": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60407,
+        "name": "至策",
+        "quality": 7
+    },
+    "60408": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60408,
+        "name": "至策",
+        "quality": 8
+    },
+    "60409": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60409,
+        "name": "至策",
+        "quality": 9
+    },
+    "60410": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60410,
+        "name": "至策",
+        "quality": 9
+    },
+    "60411": {
+        "advance": 1,
+        "gear_type": 6,
+        "id": 60411,
+        "name": "至策",
+        "quality": 9
+    },
+    "60501": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60501,
+        "name": "骁锐",
+        "quality": 1
+    },
+    "60502": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60502,
+        "name": "骁锐",
+        "quality": 2
+    },
+    "60503": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60503,
+        "name": "骁锐",
+        "quality": 3
+    },
+    "60504": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60504,
+        "name": "骁锐",
+        "quality": 4
+    },
+    "60505": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60505,
+        "name": "骁锐",
+        "quality": 5
+    },
+    "60506": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60506,
+        "name": "骁锐",
+        "quality": 6
+    },
+    "60507": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60507,
+        "name": "骁锐",
+        "quality": 7
+    },
+    "60508": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60508,
+        "name": "骁锐",
+        "quality": 8
+    },
+    "60509": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60509,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "60510": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60510,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "60511": {
+        "advance": 1,
+        "gear_type": 6,
+        "id": 60511,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "60601": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60601,
+        "name": "击虚",
+        "quality": 4
+    },
+    "60602": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60602,
+        "name": "击虚",
+        "quality": 5
+    },
+    "60603": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60603,
+        "name": "击虚",
+        "quality": 6
+    },
+    "60604": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60604,
+        "name": "击虚",
+        "quality": 7
+    },
+    "60605": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60605,
+        "name": "击虚",
+        "quality": 8
+    },
+    "60606": {
+        "advance": 0,
+        "gear_type": 6,
+        "id": 60606,
+        "name": "击虚",
+        "quality": 9
+    },
+    "60607": {
+        "advance": 1,
+        "gear_type": 6,
+        "id": 60607,
+        "name": "击虚",
+        "quality": 9
+    },
+    "70101": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70101,
+        "name": "机敏",
+        "quality": 4
+    },
+    "70102": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70102,
+        "name": "机敏",
+        "quality": 5
+    },
+    "70103": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70103,
+        "name": "机敏",
+        "quality": 6
+    },
+    "70104": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70104,
+        "name": "机敏",
+        "quality": 7
+    },
+    "70105": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70105,
+        "name": "机敏",
+        "quality": 8
+    },
+    "70106": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70106,
+        "name": "机敏",
+        "quality": 9
+    },
+    "70107": {
+        "advance": 1,
+        "gear_type": 7,
+        "id": 70107,
+        "name": "机敏",
+        "quality": 9
+    },
+    "70201": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70201,
+        "name": "灵动",
+        "quality": 1
+    },
+    "70202": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70202,
+        "name": "灵动",
+        "quality": 2
+    },
+    "70203": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70203,
+        "name": "灵动",
+        "quality": 3
+    },
+    "70204": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70204,
+        "name": "灵动",
+        "quality": 4
+    },
+    "70205": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70205,
+        "name": "灵动",
+        "quality": 5
+    },
+    "70206": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70206,
+        "name": "灵动",
+        "quality": 6
+    },
+    "70207": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70207,
+        "name": "灵动",
+        "quality": 7
+    },
+    "70208": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70208,
+        "name": "灵动",
+        "quality": 8
+    },
+    "70209": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70209,
+        "name": "灵动",
+        "quality": 9
+    },
+    "70210": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70210,
+        "name": "灵动",
+        "quality": 9
+    },
+    "70211": {
+        "advance": 1,
+        "gear_type": 7,
+        "id": 70211,
+        "name": "灵动",
+        "quality": 9
+    },
+    "70301": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70301,
+        "name": "坚忍",
+        "quality": 1
+    },
+    "70302": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70302,
+        "name": "坚忍",
+        "quality": 2
+    },
+    "70303": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70303,
+        "name": "坚忍",
+        "quality": 3
+    },
+    "70304": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70304,
+        "name": "坚忍",
+        "quality": 4
+    },
+    "70305": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70305,
+        "name": "坚忍",
+        "quality": 5
+    },
+    "70306": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70306,
+        "name": "坚忍",
+        "quality": 6
+    },
+    "70307": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70307,
+        "name": "坚忍",
+        "quality": 7
+    },
+    "70308": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70308,
+        "name": "坚忍",
+        "quality": 8
+    },
+    "70309": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70309,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "70310": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70310,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "70311": {
+        "advance": 1,
+        "gear_type": 7,
+        "id": 70311,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "70401": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70401,
+        "name": "沉稳",
+        "quality": 1
+    },
+    "70402": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70402,
+        "name": "沉稳",
+        "quality": 2
+    },
+    "70403": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70403,
+        "name": "沉稳",
+        "quality": 3
+    },
+    "70404": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70404,
+        "name": "沉稳",
+        "quality": 4
+    },
+    "70405": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70405,
+        "name": "沉稳",
+        "quality": 5
+    },
+    "70406": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70406,
+        "name": "沉稳",
+        "quality": 6
+    },
+    "70407": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70407,
+        "name": "沉稳",
+        "quality": 7
+    },
+    "70408": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70408,
+        "name": "沉稳",
+        "quality": 8
+    },
+    "70409": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70409,
+        "name": "沉稳",
+        "quality": 9
+    },
+    "70410": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70410,
+        "name": "沉稳",
+        "quality": 9
+    },
+    "70411": {
+        "advance": 1,
+        "gear_type": 7,
+        "id": 70411,
+        "name": "沉稳",
+        "quality": 9
+    },
+    "70501": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70501,
+        "name": "稳固",
+        "quality": 1
+    },
+    "70502": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70502,
+        "name": "稳固",
+        "quality": 2
+    },
+    "70503": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70503,
+        "name": "稳固",
+        "quality": 3
+    },
+    "70504": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70504,
+        "name": "稳固",
+        "quality": 4
+    },
+    "70505": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70505,
+        "name": "稳固",
+        "quality": 5
+    },
+    "70506": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70506,
+        "name": "稳固",
+        "quality": 6
+    },
+    "70507": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70507,
+        "name": "稳固",
+        "quality": 7
+    },
+    "70508": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70508,
+        "name": "稳固",
+        "quality": 8
+    },
+    "70509": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70509,
+        "name": "稳固",
+        "quality": 9
+    },
+    "70510": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70510,
+        "name": "稳固",
+        "quality": 9
+    },
+    "70511": {
+        "advance": 1,
+        "gear_type": 7,
+        "id": 70511,
+        "name": "稳固",
+        "quality": 9
+    },
+    "70601": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70601,
+        "name": "强韧",
+        "quality": 1
+    },
+    "70602": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70602,
+        "name": "强韧",
+        "quality": 2
+    },
+    "70603": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70603,
+        "name": "强韧",
+        "quality": 3
+    },
+    "70604": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70604,
+        "name": "强韧",
+        "quality": 4
+    },
+    "70605": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70605,
+        "name": "强韧",
+        "quality": 5
+    },
+    "70606": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70606,
+        "name": "强韧",
+        "quality": 6
+    },
+    "70607": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70607,
+        "name": "强韧",
+        "quality": 7
+    },
+    "70608": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70608,
+        "name": "强韧",
+        "quality": 8
+    },
+    "70609": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70609,
+        "name": "强韧",
+        "quality": 9
+    },
+    "70610": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70610,
+        "name": "强韧",
+        "quality": 9
+    },
+    "70611": {
+        "advance": 1,
+        "gear_type": 7,
+        "id": 70611,
+        "name": "强韧",
+        "quality": 9
+    },
+    "70701": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70701,
+        "name": "清毅",
+        "quality": 2
+    },
+    "70702": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70702,
+        "name": "清毅",
+        "quality": 3
+    },
+    "70703": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70703,
+        "name": "清毅",
+        "quality": 4
+    },
+    "70704": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70704,
+        "name": "清毅",
+        "quality": 5
+    },
+    "70705": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70705,
+        "name": "清毅",
+        "quality": 8
+    },
+    "70706": {
+        "advance": 0,
+        "gear_type": 7,
+        "id": 70706,
+        "name": "清毅",
+        "quality": 9
+    },
+    "70707": {
+        "advance": 1,
+        "gear_type": 7,
+        "id": 70707,
+        "name": "清毅",
+        "quality": 9
+    },
+    "80101": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80101,
+        "name": "稳固",
+        "quality": 1
+    },
+    "80102": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80102,
+        "name": "稳固",
+        "quality": 2
+    },
+    "80103": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80103,
+        "name": "稳固",
+        "quality": 3
+    },
+    "80104": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80104,
+        "name": "稳固",
+        "quality": 4
+    },
+    "80105": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80105,
+        "name": "稳固",
+        "quality": 5
+    },
+    "80106": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80106,
+        "name": "稳固",
+        "quality": 6
+    },
+    "80107": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80107,
+        "name": "稳固",
+        "quality": 7
+    },
+    "80108": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80108,
+        "name": "稳固",
+        "quality": 8
+    },
+    "80109": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80109,
+        "name": "稳固",
+        "quality": 9
+    },
+    "80110": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80110,
+        "name": "稳固",
+        "quality": 9
+    },
+    "80111": {
+        "advance": 1,
+        "gear_type": 8,
+        "id": 80111,
+        "name": "稳固",
+        "quality": 9
+    },
+    "80201": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80201,
+        "name": "机敏",
+        "quality": 4
+    },
+    "80202": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80202,
+        "name": "机敏",
+        "quality": 5
+    },
+    "80203": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80203,
+        "name": "机敏",
+        "quality": 6
+    },
+    "80204": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80204,
+        "name": "机敏",
+        "quality": 7
+    },
+    "80205": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80205,
+        "name": "机敏",
+        "quality": 8
+    },
+    "80206": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80206,
+        "name": "机敏",
+        "quality": 9
+    },
+    "80207": {
+        "advance": 1,
+        "gear_type": 8,
+        "id": 80207,
+        "name": "机敏",
+        "quality": 9
+    },
+    "80301": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80301,
+        "name": "不屈",
+        "quality": 4
+    },
+    "80302": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80302,
+        "name": "不屈",
+        "quality": 5
+    },
+    "80303": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80303,
+        "name": "不屈",
+        "quality": 6
+    },
+    "80304": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80304,
+        "name": "不屈",
+        "quality": 7
+    },
+    "80305": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80305,
+        "name": "不屈",
+        "quality": 8
+    },
+    "80306": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80306,
+        "name": "不屈",
+        "quality": 9
+    },
+    "80307": {
+        "advance": 1,
+        "gear_type": 8,
+        "id": 80307,
+        "name": "不屈",
+        "quality": 9
+    },
+    "80401": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80401,
+        "name": "济世",
+        "quality": 1
+    },
+    "80402": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80402,
+        "name": "济世",
+        "quality": 2
+    },
+    "80403": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80403,
+        "name": "济世",
+        "quality": 3
+    },
+    "80404": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80404,
+        "name": "济世",
+        "quality": 4
+    },
+    "80405": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80405,
+        "name": "济世",
+        "quality": 5
+    },
+    "80406": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80406,
+        "name": "济世",
+        "quality": 6
+    },
+    "80407": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80407,
+        "name": "济世",
+        "quality": 7
+    },
+    "80408": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80408,
+        "name": "济世",
+        "quality": 8
+    },
+    "80409": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80409,
+        "name": "济世",
+        "quality": 9
+    },
+    "80410": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80410,
+        "name": "济世",
+        "quality": 9
+    },
+    "80411": {
+        "advance": 1,
+        "gear_type": 8,
+        "id": 80411,
+        "name": "济世",
+        "quality": 9
+    },
+    "80501": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80501,
+        "name": "威势",
+        "quality": 1
+    },
+    "80502": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80502,
+        "name": "威势",
+        "quality": 2
+    },
+    "80503": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80503,
+        "name": "威势",
+        "quality": 3
+    },
+    "80504": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80504,
+        "name": "威势",
+        "quality": 4
+    },
+    "80505": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80505,
+        "name": "威势",
+        "quality": 5
+    },
+    "80506": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80506,
+        "name": "威势",
+        "quality": 6
+    },
+    "80507": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80507,
+        "name": "威势",
+        "quality": 7
+    },
+    "80508": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80508,
+        "name": "威势",
+        "quality": 8
+    },
+    "80509": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80509,
+        "name": "威势",
+        "quality": 9
+    },
+    "80510": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80510,
+        "name": "威势",
+        "quality": 9
+    },
+    "80511": {
+        "advance": 1,
+        "gear_type": 8,
+        "id": 80511,
+        "name": "威势",
+        "quality": 9
+    },
+    "80601": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80601,
+        "name": "艮止",
+        "quality": 1
+    },
+    "80602": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80602,
+        "name": "艮止",
+        "quality": 2
+    },
+    "80603": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80603,
+        "name": "艮止",
+        "quality": 3
+    },
+    "80604": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80604,
+        "name": "艮止",
+        "quality": 4
+    },
+    "80605": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80605,
+        "name": "艮止",
+        "quality": 5
+    },
+    "80606": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80606,
+        "name": "艮止",
+        "quality": 6
+    },
+    "80607": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80607,
+        "name": "艮止",
+        "quality": 7
+    },
+    "80608": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80608,
+        "name": "艮止",
+        "quality": 8
+    },
+    "80609": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80609,
+        "name": "艮止",
+        "quality": 9
+    },
+    "80610": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80610,
+        "name": "艮止",
+        "quality": 9
+    },
+    "80611": {
+        "advance": 1,
+        "gear_type": 8,
+        "id": 80611,
+        "name": "艮止",
+        "quality": 9
+    },
+    "80701": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80701,
+        "name": "惑言",
+        "quality": 2
+    },
+    "80702": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80702,
+        "name": "惑言",
+        "quality": 5
+    },
+    "80703": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80703,
+        "name": "惑言",
+        "quality": 9
+    },
+    "80704": {
+        "advance": 1,
+        "gear_type": 8,
+        "id": 80704,
+        "name": "惑言",
+        "quality": 9
+    },
+    "80705": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80705,
+        "name": "惑言",
+        "quality": 3
+    },
+    "80706": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80706,
+        "name": "惑言",
+        "quality": 4
+    },
+    "80707": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80707,
+        "name": "惑言",
+        "quality": 8
+    },
+    "80708": {
+        "advance": 0,
+        "gear_type": 8,
+        "id": 80708,
+        "name": "惑言",
+        "quality": 8
+    },
+    "90101": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90101,
+        "name": "稳固",
+        "quality": 1
+    },
+    "90102": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90102,
+        "name": "稳固",
+        "quality": 2
+    },
+    "90103": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90103,
+        "name": "稳固",
+        "quality": 3
+    },
+    "90104": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90104,
+        "name": "稳固",
+        "quality": 4
+    },
+    "90105": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90105,
+        "name": "稳固",
+        "quality": 5
+    },
+    "90106": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90106,
+        "name": "稳固",
+        "quality": 6
+    },
+    "90107": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90107,
+        "name": "稳固",
+        "quality": 7
+    },
+    "90108": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90108,
+        "name": "稳固",
+        "quality": 8
+    },
+    "90109": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90109,
+        "name": "稳固",
+        "quality": 9
+    },
+    "90110": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90110,
+        "name": "稳固",
+        "quality": 9
+    },
+    "90111": {
+        "advance": 1,
+        "gear_type": 9,
+        "id": 90111,
+        "name": "稳固",
+        "quality": 9
+    },
+    "90201": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90201,
+        "name": "机敏",
+        "quality": 4
+    },
+    "90202": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90202,
+        "name": "机敏",
+        "quality": 5
+    },
+    "90203": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90203,
+        "name": "机敏",
+        "quality": 6
+    },
+    "90204": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90204,
+        "name": "机敏",
+        "quality": 7
+    },
+    "90205": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90205,
+        "name": "机敏",
+        "quality": 8
+    },
+    "90206": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90206,
+        "name": "机敏",
+        "quality": 9
+    },
+    "90207": {
+        "advance": 1,
+        "gear_type": 9,
+        "id": 90207,
+        "name": "机敏",
+        "quality": 9
+    },
+    "90301": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90301,
+        "name": "不屈",
+        "quality": 4
+    },
+    "90302": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90302,
+        "name": "不屈",
+        "quality": 5
+    },
+    "90303": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90303,
+        "name": "不屈",
+        "quality": 6
+    },
+    "90304": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90304,
+        "name": "不屈",
+        "quality": 7
+    },
+    "90305": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90305,
+        "name": "不屈",
+        "quality": 8
+    },
+    "90306": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90306,
+        "name": "不屈",
+        "quality": 9
+    },
+    "90307": {
+        "advance": 1,
+        "gear_type": 9,
+        "id": 90307,
+        "name": "不屈",
+        "quality": 9
+    },
+    "90401": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90401,
+        "name": "济世",
+        "quality": 1
+    },
+    "90402": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90402,
+        "name": "济世",
+        "quality": 2
+    },
+    "90403": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90403,
+        "name": "济世",
+        "quality": 3
+    },
+    "90404": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90404,
+        "name": "济世",
+        "quality": 4
+    },
+    "90405": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90405,
+        "name": "济世",
+        "quality": 5
+    },
+    "90406": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90406,
+        "name": "济世",
+        "quality": 6
+    },
+    "90407": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90407,
+        "name": "济世",
+        "quality": 7
+    },
+    "90408": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90408,
+        "name": "济世",
+        "quality": 8
+    },
+    "90409": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90409,
+        "name": "济世",
+        "quality": 9
+    },
+    "90410": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90410,
+        "name": "济世",
+        "quality": 9
+    },
+    "90411": {
+        "advance": 1,
+        "gear_type": 9,
+        "id": 90411,
+        "name": "济世",
+        "quality": 9
+    },
+    "90501": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90501,
+        "name": "威势",
+        "quality": 1
+    },
+    "90502": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90502,
+        "name": "威势",
+        "quality": 2
+    },
+    "90503": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90503,
+        "name": "威势",
+        "quality": 3
+    },
+    "90504": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90504,
+        "name": "威势",
+        "quality": 4
+    },
+    "90505": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90505,
+        "name": "威势",
+        "quality": 5
+    },
+    "90506": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90506,
+        "name": "威势",
+        "quality": 6
+    },
+    "90507": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90507,
+        "name": "威势",
+        "quality": 7
+    },
+    "90508": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90508,
+        "name": "威势",
+        "quality": 8
+    },
+    "90509": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90509,
+        "name": "威势",
+        "quality": 9
+    },
+    "90510": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90510,
+        "name": "威势",
+        "quality": 9
+    },
+    "90511": {
+        "advance": 1,
+        "gear_type": 9,
+        "id": 90511,
+        "name": "威势",
+        "quality": 9
+    },
+    "90601": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90601,
+        "name": "灵动",
+        "quality": 1
+    },
+    "90602": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90602,
+        "name": "灵动",
+        "quality": 2
+    },
+    "90603": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90603,
+        "name": "灵动",
+        "quality": 3
+    },
+    "90604": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90604,
+        "name": "灵动",
+        "quality": 4
+    },
+    "90605": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90605,
+        "name": "灵动",
+        "quality": 5
+    },
+    "90606": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90606,
+        "name": "灵动",
+        "quality": 6
+    },
+    "90607": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90607,
+        "name": "灵动",
+        "quality": 7
+    },
+    "90608": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90608,
+        "name": "灵动",
+        "quality": 8
+    },
+    "90609": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90609,
+        "name": "灵动",
+        "quality": 9
+    },
+    "90610": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90610,
+        "name": "灵动",
+        "quality": 9
+    },
+    "90611": {
+        "advance": 1,
+        "gear_type": 9,
+        "id": 90611,
+        "name": "灵动",
+        "quality": 9
+    },
+    "90701": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90701,
+        "name": "惑言",
+        "quality": 2
+    },
+    "90702": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90702,
+        "name": "惑言",
+        "quality": 5
+    },
+    "90703": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90703,
+        "name": "惑言",
+        "quality": 9
+    },
+    "90704": {
+        "advance": 1,
+        "gear_type": 9,
+        "id": 90704,
+        "name": "惑言",
+        "quality": 9
+    },
+    "90705": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90705,
+        "name": "惑言",
+        "quality": 3
+    },
+    "90706": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90706,
+        "name": "惑言",
+        "quality": 4
+    },
+    "90707": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90707,
+        "name": "惑言",
+        "quality": 8
+    },
+    "90708": {
+        "advance": 0,
+        "gear_type": 9,
+        "id": 90708,
+        "name": "惑言",
+        "quality": 8
+    },
+    "100101": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100101,
+        "name": "骁锐",
+        "quality": 1
+    },
+    "100102": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100102,
+        "name": "骁锐",
+        "quality": 2
+    },
+    "100103": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100103,
+        "name": "骁锐",
+        "quality": 3
+    },
+    "100104": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100104,
+        "name": "骁锐",
+        "quality": 4
+    },
+    "100105": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100105,
+        "name": "骁锐",
+        "quality": 5
+    },
+    "100106": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100106,
+        "name": "骁锐",
+        "quality": 6
+    },
+    "100107": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100107,
+        "name": "骁锐",
+        "quality": 7
+    },
+    "100108": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100108,
+        "name": "骁锐",
+        "quality": 8
+    },
+    "100109": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100109,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "100110": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100110,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "100111": {
+        "advance": 1,
+        "gear_type": 10,
+        "id": 100111,
+        "name": "骁锐",
+        "quality": 9
+    },
+    "100201": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100201,
+        "name": "天资",
+        "quality": 1
+    },
+    "100202": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100202,
+        "name": "天资",
+        "quality": 2
+    },
+    "100203": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100203,
+        "name": "天资",
+        "quality": 3
+    },
+    "100204": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100204,
+        "name": "天资",
+        "quality": 4
+    },
+    "100205": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100205,
+        "name": "天资",
+        "quality": 5
+    },
+    "100206": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100206,
+        "name": "天资",
+        "quality": 6
+    },
+    "100207": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100207,
+        "name": "天资",
+        "quality": 7
+    },
+    "100208": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100208,
+        "name": "天资",
+        "quality": 8
+    },
+    "100209": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100209,
+        "name": "天资",
+        "quality": 9
+    },
+    "100210": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100210,
+        "name": "天资",
+        "quality": 9
+    },
+    "100211": {
+        "advance": 1,
+        "gear_type": 10,
+        "id": 100211,
+        "name": "天资",
+        "quality": 9
+    },
+    "100301": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100301,
+        "name": "奔袭",
+        "quality": 3
+    },
+    "100302": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100302,
+        "name": "奔袭",
+        "quality": 4
+    },
+    "100303": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100303,
+        "name": "奔袭",
+        "quality": 6
+    },
+    "100304": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100304,
+        "name": "奔袭",
+        "quality": 7
+    },
+    "100305": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100305,
+        "name": "奔袭",
+        "quality": 8
+    },
+    "100306": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100306,
+        "name": "奔袭",
+        "quality": 9
+    },
+    "100307": {
+        "advance": 1,
+        "gear_type": 10,
+        "id": 100307,
+        "name": "奔袭",
+        "quality": 9
+    },
+    "100401": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100401,
+        "name": "坚毅",
+        "quality": 3
+    },
+    "100402": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100402,
+        "name": "坚毅",
+        "quality": 5
+    },
+    "100403": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100403,
+        "name": "坚毅",
+        "quality": 7
+    },
+    "100404": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100404,
+        "name": "坚毅",
+        "quality": 9
+    },
+    "100405": {
+        "advance": 1,
+        "gear_type": 10,
+        "id": 100405,
+        "name": "坚毅",
+        "quality": 9
+    },
+    "100406": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100406,
+        "name": "坚毅",
+        "quality": 2
+    },
+    "100407": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100407,
+        "name": "坚毅",
+        "quality": 4
+    },
+    "100408": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100408,
+        "name": "坚毅",
+        "quality": 6
+    },
+    "100409": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100409,
+        "name": "坚毅",
+        "quality": 8
+    },
+    "100501": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100501,
+        "name": "选锋",
+        "quality": 1
+    },
+    "100502": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100502,
+        "name": "选锋",
+        "quality": 2
+    },
+    "100503": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100503,
+        "name": "选锋",
+        "quality": 3
+    },
+    "100504": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100504,
+        "name": "选锋",
+        "quality": 4
+    },
+    "100505": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100505,
+        "name": "选锋",
+        "quality": 5
+    },
+    "100506": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100506,
+        "name": "选锋",
+        "quality": 6
+    },
+    "100507": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100507,
+        "name": "选锋",
+        "quality": 7
+    },
+    "100508": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100508,
+        "name": "选锋",
+        "quality": 8
+    },
+    "100509": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100509,
+        "name": "选锋",
+        "quality": 9
+    },
+    "100510": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100510,
+        "name": "选锋",
+        "quality": 9
+    },
+    "100511": {
+        "advance": 1,
+        "gear_type": 10,
+        "id": 100511,
+        "name": "选锋",
+        "quality": 9
+    },
+    "100601": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100601,
+        "name": "蓄锐",
+        "quality": 1
+    },
+    "100602": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100602,
+        "name": "蓄锐",
+        "quality": 2
+    },
+    "100603": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100603,
+        "name": "蓄锐",
+        "quality": 3
+    },
+    "100604": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100604,
+        "name": "蓄锐",
+        "quality": 4
+    },
+    "100605": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100605,
+        "name": "蓄锐",
+        "quality": 5
+    },
+    "100606": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100606,
+        "name": "蓄锐",
+        "quality": 6
+    },
+    "100607": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100607,
+        "name": "蓄锐",
+        "quality": 7
+    },
+    "100608": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100608,
+        "name": "蓄锐",
+        "quality": 8
+    },
+    "100609": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100609,
+        "name": "蓄锐",
+        "quality": 9
+    },
+    "100610": {
+        "advance": 0,
+        "gear_type": 10,
+        "id": 100610,
+        "name": "蓄锐",
+        "quality": 9
+    },
+    "100611": {
+        "advance": 1,
+        "gear_type": 10,
+        "id": 100611,
+        "name": "蓄锐",
+        "quality": 9
+    },
+    "110101": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110101,
+        "name": "济世",
+        "quality": 1
+    },
+    "110102": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110102,
+        "name": "济世",
+        "quality": 2
+    },
+    "110103": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110103,
+        "name": "济世",
+        "quality": 3
+    },
+    "110104": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110104,
+        "name": "济世",
+        "quality": 4
+    },
+    "110105": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110105,
+        "name": "济世",
+        "quality": 5
+    },
+    "110106": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110106,
+        "name": "济世",
+        "quality": 6
+    },
+    "110107": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110107,
+        "name": "济世",
+        "quality": 7
+    },
+    "110108": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110108,
+        "name": "济世",
+        "quality": 8
+    },
+    "110109": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110109,
+        "name": "济世",
+        "quality": 9
+    },
+    "110110": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110110,
+        "name": "济世",
+        "quality": 9
+    },
+    "110111": {
+        "advance": 1,
+        "gear_type": 11,
+        "id": 110111,
+        "name": "济世",
+        "quality": 9
+    },
+    "110201": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110201,
+        "name": "坚忍",
+        "quality": 1
+    },
+    "110202": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110202,
+        "name": "坚忍",
+        "quality": 2
+    },
+    "110203": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110203,
+        "name": "坚忍",
+        "quality": 3
+    },
+    "110204": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110204,
+        "name": "坚忍",
+        "quality": 4
+    },
+    "110205": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110205,
+        "name": "坚忍",
+        "quality": 5
+    },
+    "110206": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110206,
+        "name": "坚忍",
+        "quality": 6
+    },
+    "110207": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110207,
+        "name": "坚忍",
+        "quality": 7
+    },
+    "110208": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110208,
+        "name": "坚忍",
+        "quality": 8
+    },
+    "110209": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110209,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "110210": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110210,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "110211": {
+        "advance": 1,
+        "gear_type": 11,
+        "id": 110211,
+        "name": "坚忍",
+        "quality": 9
+    },
+    "110301": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110301,
+        "name": "不屈",
+        "quality": 4
+    },
+    "110302": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110302,
+        "name": "不屈",
+        "quality": 5
+    },
+    "110303": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110303,
+        "name": "不屈",
+        "quality": 6
+    },
+    "110304": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110304,
+        "name": "不屈",
+        "quality": 7
+    },
+    "110305": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110305,
+        "name": "不屈",
+        "quality": 8
+    },
+    "110306": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110306,
+        "name": "不屈",
+        "quality": 9
+    },
+    "110307": {
+        "advance": 1,
+        "gear_type": 11,
+        "id": 110307,
+        "name": "不屈",
+        "quality": 9
+    },
+    "110401": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110401,
+        "name": "不懈",
+        "quality": 4
+    },
+    "110402": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110402,
+        "name": "不懈",
+        "quality": 5
+    },
+    "110403": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110403,
+        "name": "不懈",
+        "quality": 6
+    },
+    "110404": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110404,
+        "name": "不懈",
+        "quality": 7
+    },
+    "110405": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110405,
+        "name": "不懈",
+        "quality": 8
+    },
+    "110406": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110406,
+        "name": "不懈",
+        "quality": 9
+    },
+    "110407": {
+        "advance": 1,
+        "gear_type": 11,
+        "id": 110407,
+        "name": "不懈",
+        "quality": 9
+    },
+    "110501": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110501,
+        "name": "威势",
+        "quality": 1
+    },
+    "110502": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110502,
+        "name": "威势",
+        "quality": 2
+    },
+    "110503": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110503,
+        "name": "威势",
+        "quality": 3
+    },
+    "110504": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110504,
+        "name": "威势",
+        "quality": 4
+    },
+    "110505": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110505,
+        "name": "威势",
+        "quality": 5
+    },
+    "110506": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110506,
+        "name": "威势",
+        "quality": 6
+    },
+    "110507": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110507,
+        "name": "威势",
+        "quality": 7
+    },
+    "110508": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110508,
+        "name": "威势",
+        "quality": 8
+    },
+    "110509": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110509,
+        "name": "威势",
+        "quality": 9
+    },
+    "110510": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110510,
+        "name": "威势",
+        "quality": 9
+    },
+    "110511": {
+        "advance": 1,
+        "gear_type": 11,
+        "id": 110511,
+        "name": "威势",
+        "quality": 9
+    },
+    "110601": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110601,
+        "name": "戒备",
+        "quality": 1
+    },
+    "110602": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110602,
+        "name": "戒备",
+        "quality": 2
+    },
+    "110603": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110603,
+        "name": "戒备",
+        "quality": 3
+    },
+    "110604": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110604,
+        "name": "戒备",
+        "quality": 4
+    },
+    "110605": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110605,
+        "name": "戒备",
+        "quality": 5
+    },
+    "110606": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110606,
+        "name": "戒备",
+        "quality": 6
+    },
+    "110607": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110607,
+        "name": "戒备",
+        "quality": 7
+    },
+    "110608": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110608,
+        "name": "戒备",
+        "quality": 8
+    },
+    "110609": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110609,
+        "name": "戒备",
+        "quality": 9
+    },
+    "110610": {
+        "advance": 0,
+        "gear_type": 11,
+        "id": 110610,
+        "name": "戒备",
+        "quality": 9
+    },
+    "110611": {
+        "advance": 1,
+        "gear_type": 11,
+        "id": 110611,
+        "name": "戒备",
+        "quality": 9
+    },
+    "120101": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120101,
+        "name": "商盈",
+        "quality": 1
+    },
+    "120102": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120102,
+        "name": "商盈",
+        "quality": 2
+    },
+    "120103": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120103,
+        "name": "商盈",
+        "quality": 3
+    },
+    "120104": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120104,
+        "name": "商盈",
+        "quality": 4
+    },
+    "120105": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120105,
+        "name": "商盈",
+        "quality": 5
+    },
+    "120106": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120106,
+        "name": "商盈",
+        "quality": 6
+    },
+    "120107": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120107,
+        "name": "商盈",
+        "quality": 7
+    },
+    "120108": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120108,
+        "name": "商盈",
+        "quality": 8
+    },
+    "120109": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120109,
+        "name": "商盈",
+        "quality": 9
+    },
+    "120110": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120110,
+        "name": "商盈",
+        "quality": 9
+    },
+    "120111": {
+        "advance": 1,
+        "gear_type": 12,
+        "id": 120111,
+        "name": "商盈",
+        "quality": 9
+    },
+    "120201": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120201,
+        "name": "税丰",
+        "quality": 4
+    },
+    "120202": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120202,
+        "name": "税丰",
+        "quality": 5
+    },
+    "120203": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120203,
+        "name": "税丰",
+        "quality": 6
+    },
+    "120204": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120204,
+        "name": "税丰",
+        "quality": 7
+    },
+    "120205": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120205,
+        "name": "税丰",
+        "quality": 8
+    },
+    "120206": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120206,
+        "name": "税丰",
+        "quality": 9
+    },
+    "120207": {
+        "advance": 1,
+        "gear_type": 12,
+        "id": 120207,
+        "name": "税丰",
+        "quality": 9
+    },
+    "120301": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120301,
+        "name": "富庶",
+        "quality": 1
+    },
+    "120302": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120302,
+        "name": "富庶",
+        "quality": 2
+    },
+    "120303": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120303,
+        "name": "富庶",
+        "quality": 3
+    },
+    "120304": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120304,
+        "name": "富庶",
+        "quality": 4
+    },
+    "120305": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120305,
+        "name": "富庶",
+        "quality": 5
+    },
+    "120306": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120306,
+        "name": "富庶",
+        "quality": 6
+    },
+    "120307": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120307,
+        "name": "富庶",
+        "quality": 7
+    },
+    "120308": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120308,
+        "name": "富庶",
+        "quality": 8
+    },
+    "120309": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120309,
+        "name": "富庶",
+        "quality": 9
+    },
+    "120310": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120310,
+        "name": "富庶",
+        "quality": 9
+    },
+    "120311": {
+        "advance": 1,
+        "gear_type": 12,
+        "id": 120311,
+        "name": "富庶",
+        "quality": 9
+    },
+    "120401": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120401,
+        "name": "采伐",
+        "quality": 1
+    },
+    "120402": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120402,
+        "name": "采伐",
+        "quality": 2
+    },
+    "120403": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120403,
+        "name": "采伐",
+        "quality": 3
+    },
+    "120404": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120404,
+        "name": "采伐",
+        "quality": 4
+    },
+    "120405": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120405,
+        "name": "采伐",
+        "quality": 5
+    },
+    "120406": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120406,
+        "name": "采伐",
+        "quality": 6
+    },
+    "120407": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120407,
+        "name": "采伐",
+        "quality": 7
+    },
+    "120408": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120408,
+        "name": "采伐",
+        "quality": 8
+    },
+    "120409": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120409,
+        "name": "采伐",
+        "quality": 9
+    },
+    "120410": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120410,
+        "name": "采伐",
+        "quality": 9
+    },
+    "120411": {
+        "advance": 1,
+        "gear_type": 12,
+        "id": 120411,
+        "name": "采伐",
+        "quality": 9
+    },
+    "120501": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120501,
+        "name": "植垦",
+        "quality": 1
+    },
+    "120502": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120502,
+        "name": "植垦",
+        "quality": 2
+    },
+    "120503": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120503,
+        "name": "植垦",
+        "quality": 3
+    },
+    "120504": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120504,
+        "name": "植垦",
+        "quality": 4
+    },
+    "120505": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120505,
+        "name": "植垦",
+        "quality": 5
+    },
+    "120506": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120506,
+        "name": "植垦",
+        "quality": 6
+    },
+    "120507": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120507,
+        "name": "植垦",
+        "quality": 7
+    },
+    "120508": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120508,
+        "name": "植垦",
+        "quality": 8
+    },
+    "120509": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120509,
+        "name": "植垦",
+        "quality": 9
+    },
+    "120510": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120510,
+        "name": "植垦",
+        "quality": 9
+    },
+    "120511": {
+        "advance": 1,
+        "gear_type": 12,
+        "id": 120511,
+        "name": "植垦",
+        "quality": 9
+    },
+    "120601": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120601,
+        "name": "取衡",
+        "quality": 1
+    },
+    "120602": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120602,
+        "name": "取衡",
+        "quality": 2
+    },
+    "120603": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120603,
+        "name": "取衡",
+        "quality": 3
+    },
+    "120604": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120604,
+        "name": "取衡",
+        "quality": 4
+    },
+    "120605": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120605,
+        "name": "取衡",
+        "quality": 5
+    },
+    "120606": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120606,
+        "name": "取衡",
+        "quality": 6
+    },
+    "120607": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120607,
+        "name": "取衡",
+        "quality": 7
+    },
+    "120608": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120608,
+        "name": "取衡",
+        "quality": 8
+    },
+    "120609": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120609,
+        "name": "取衡",
+        "quality": 9
+    },
+    "120610": {
+        "advance": 0,
+        "gear_type": 12,
+        "id": 120610,
+        "name": "取衡",
+        "quality": 9
+    },
+    "120611": {
+        "advance": 1,
+        "gear_type": 12,
+        "id": 120611,
+        "name": "取衡",
+        "quality": 9
+    }
+}
