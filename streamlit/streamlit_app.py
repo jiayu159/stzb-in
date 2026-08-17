@@ -131,10 +131,16 @@ def resolve_my_union(conn):
 # ---------- 查询函数 ----------
 
 @st.cache_data(ttl=10, show_spinner=False)
-def query_member_teams(min_hp=0):
+def query_member_teams(min_hp=0, name=""):
     """同盟成员常用队伍：每名成员出现次数最多的一个队伍"""
     conn = get_conn()
-    sql = """
+    name_cond = "AND attack_name LIKE ?" if name else ""
+    name_cond2 = "AND defend_name LIKE ?" if name else ""
+    if name:
+        params = [f"%{name}%", min_hp, f"%{name}%", min_hp]
+    else:
+        params = [min_hp, min_hp]
+    sql = f"""
     WITH member_rows AS (
         SELECT attack_name AS player_name, attack_hero1_id AS h1, attack_hero2_id AS h2, attack_hero3_id AS h3,
                attack_hero1_level AS l1, attack_hero2_level AS l2, attack_hero3_level AS l3,
@@ -142,6 +148,7 @@ def query_member_teams(min_hp=0):
                attack_total_star AS total_star, attack_hp AS hp, time, all_skill_info
         FROM battle_report
         WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
+          {name_cond}
           AND attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
           AND attack_hero1_level >= 15 AND attack_hero2_level >= 15 AND attack_hero3_level >= 15
           AND attack_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
@@ -152,6 +159,7 @@ def query_member_teams(min_hp=0):
                defend_total_star, defend_hp, time, all_skill_info
         FROM battle_report
         WHERE defend_name IN (SELECT name FROM team_user WHERE name != '')
+          {name_cond2}
           AND defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
           AND defend_hero1_level >= 15 AND defend_hero2_level >= 15 AND defend_hero3_level >= 15
           AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
@@ -168,23 +176,32 @@ def query_member_teams(min_hp=0):
     )
     SELECT player_name, h1, h2, h3, total_star, hp, team_count, last_time, all_skill_info
     FROM ranked WHERE rn = 1 ORDER BY player_name"""
-    return pd.read_sql_query(sql, conn, params=(min_hp, min_hp))
+    return pd.read_sql_query(sql, conn, params=params)
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def query_enemy_teams(min_hp=0):
-    """战败的非己方同盟人员队伍（过滤无归属），按战败次数递减"""
+def query_enemy_teams(min_hp=0, name=""):
+    """交战过的非己方同盟人员队伍(含胜负、过滤无归属)，按交战次数递减"""
     conn = get_conn()
     my_union = resolve_my_union(conn)
-    sql = """
-    WITH enemy_losses AS (
+    name_cond = "AND defend_name LIKE ?" if name else ""
+    name_cond2 = "AND attack_name LIKE ?" if name else ""
+    params = [my_union]
+    if name:
+        params += [f"%{name}%"]
+    params += [min_hp, my_union]
+    if name:
+        params += [f"%{name}%"]
+    params += [min_hp]
+    sql = f"""
+    WITH enemy_encounters AS (
         SELECT defend_name AS player_name, defend_hero1_id AS h1, defend_hero2_id AS h2, defend_hero3_id AS h3,
                defend_total_star AS total_star, defend_hp AS hp, time, all_skill_info
         FROM battle_report
         WHERE attack_union_name = ?
           AND defend_name NOT IN (SELECT name FROM team_user WHERE name != '')
           AND defend_union_name != ''
-          AND result IN (1,2,3,4,10,18,19)
+          {name_cond}
           AND defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
           AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
         UNION ALL
@@ -194,15 +211,15 @@ def query_enemy_teams(min_hp=0):
         WHERE defend_union_name = ?
           AND attack_name NOT IN (SELECT name FROM team_user WHERE name != '')
           AND attack_union_name != ''
-          AND result = 0
+          {name_cond2}
           AND attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
           AND attack_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
     )
-    SELECT player_name, h1, h2, h3, total_star, hp, COUNT(*) AS loss_count, MAX(time) AS last_time,
+    SELECT player_name, h1, h2, h3, total_star, hp, COUNT(*) AS encounter_count, MAX(time) AS last_time,
            MAX(all_skill_info) AS all_skill_info
-    FROM enemy_losses GROUP BY player_name, h1, h2, h3
-    ORDER BY loss_count DESC"""
-    return pd.read_sql_query(sql, conn, params=(my_union, min_hp, my_union, min_hp))
+    FROM enemy_encounters GROUP BY player_name, h1, h2, h3
+    ORDER BY encounter_count DESC"""
+    return pd.read_sql_query(sql, conn, params=params)
 
 
 @st.cache_data(ttl=10, show_spinner=False)
@@ -310,7 +327,7 @@ def ai_chat(message):
 # ---------- 页面 ----------
 
 st.sidebar.title("🗡️ 同盟数据查询")
-page = st.sidebar.radio("功能", ["战报查询", "同盟成员常用队伍", "战败敌军队伍", "成员活跃度", "AI 小秘书"])
+page = st.sidebar.radio("功能", ["战报查询", "同盟成员常用队伍", "敌军队伍", "成员活跃度", "AI 小秘书"])
 
 using_turso = bool(st.secrets.get("TURSO_URL", "") and st.secrets.get("TURSO_TOKEN", ""))
 if not using_turso and not os.path.exists(DB_PATH):
@@ -333,10 +350,11 @@ if page == "战报查询":
 
 elif page == "同盟成员常用队伍":
     st.header("同盟成员常用队伍")
+    name = st.text_input("成员名关键词", key="mn")
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="m")
     if st.button("查询", type="primary"):
         with st.spinner("查询中..."):
-            df = query_member_teams(int(min_hp))
+            df = query_member_teams(int(min_hp), name.strip())
         st.success(f"共 {len(df)} 名成员")
         df_disp = df.copy()
         df_disp["武将"] = df_disp["h1"].astype(str) + " / " + df_disp["h2"].astype(str) + " / " + df_disp["h3"].astype(str)
@@ -346,18 +364,19 @@ elif page == "同盟成员常用队伍":
             use_container_width=True, hide_index=True)
         st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
 
-elif page == "战败敌军队伍":
-    st.header("战败的非己方同盟人员队伍")
-    st.caption("已过滤无同盟归属对象")
+elif page == "敌军队伍":
+    st.header("敌军队伍")
+    st.caption("与本盟交战过的非己方同盟人员(含胜负)，已过滤无同盟归属")
+    name = st.text_input("玩家名关键词", key="en")
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="e")
     if st.button("查询", type="primary"):
         with st.spinner("查询中..."):
-            df = query_enemy_teams(int(min_hp))
+            df = query_enemy_teams(int(min_hp), name.strip())
         st.success(f"共 {len(df)} 支队伍")
         df_disp = df.copy()
         df_disp["武将"] = df_disp["h1"].astype(str) + " / " + df_disp["h2"].astype(str) + " / " + df_disp["h3"].astype(str)
-        st.dataframe(df_disp[["player_name", "武将", "total_star", "hp", "loss_count"]].rename(
-            columns={"player_name": "玩家", "total_star": "红度", "hp": "兵力", "loss_count": "战败次数"}),
+        st.dataframe(df_disp[["player_name", "武将", "total_star", "hp", "encounter_count"]].rename(
+            columns={"player_name": "玩家", "total_star": "红度", "hp": "兵力", "encounter_count": "交战次数"}),
             use_container_width=True, hide_index=True)
         st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
 
