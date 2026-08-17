@@ -593,7 +593,8 @@ elif page == "成员活跃度":
     st.header("成员活跃度")
     mode = st.radio("面板", ["每周活跃度", "赛季总活跃度"], key="act_mode", horizontal=True)
     if mode == "每周活跃度":
-        week_off = st.radio("选择周", {"本周": 0, "上周": -1, "前两周": -2}, key="act_week", horizontal=True)
+        week_opt = st.radio("选择周", ["本周", "上周", "前两周"], key="act_week", horizontal=True)
+        week_off = {"本周": 0, "上周": -1, "前两周": -2}[week_opt]
         with st.spinner("查询中..."):
             df = query_weekly_activity(week_off)
         if len(df):
