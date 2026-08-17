@@ -377,11 +377,10 @@ def query_enemy_teams(min_hp=0, name=""):
     return pd.read_sql_query(sql, conn, params=params)
 
 
-@st.cache_data(ttl=10, show_spinner=False)
 def week_start(offset=0):
     """指定周周一 0 点时间戳(本地时区)，offset: 0=本周, -1=上周"""
     today = datetime.now().date()
-    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=offset)
+    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=int(offset))
     return int(datetime(monday.year, monday.month, monday.day).timestamp())
 
 
