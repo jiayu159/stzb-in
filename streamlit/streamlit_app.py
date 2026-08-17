@@ -17,11 +17,20 @@ DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "dat
 class TursoCursor:
     """Turso HTTP API 游标(模拟 DBAPI2 供 pandas.read_sql_query 使用)"""
 
-    def __init__(self):
+    def __init__(self, conn):
+        self.conn = conn
         self.description = []
         self.rows = []
         self.rowcount = -1
         self._i = 0
+
+    def execute(self, sql, params=None):
+        desc, rows = self.conn._run(sql, params)
+        self.description = desc
+        self.rows = rows
+        self.rowcount = -1
+        self._i = 0
+        return self
 
     def fetchall(self):
         return self.rows
@@ -61,7 +70,7 @@ class TursoConnection:
             return "1" if v else "0"
         return "'" + str(v).replace("'", "''") + "'"
 
-    def execute(self, sql, params=None):
+    def _run(self, sql, params=None):
         if params:
             parts = str(sql).split("?")
             sql = parts[0]
@@ -74,15 +83,19 @@ class TursoConnection:
         with urllib.request.urlopen(req) as resp:
             out = json.loads(resp.read())
         res = out["results"][0]
-        cur = TursoCursor()
         if res.get("type") == "error":
             raise RuntimeError(res.get("error", {}).get("message", "Turso error"))
         result = res["response"]["result"]
-        cur.description = [(c["name"], None, None, None, None, None, None) for c in result["cols"]]
-        cur.rows = [tuple(None if isinstance(v, dict) and v.get("type") == "null" else v.get("value", v)
-                          for v in row) for row in result["rows"]]
-        cur.rowcount = result.get("affected_row_count", -1)
-        return cur
+        desc = [(c["name"], None, None, None, None, None, None) for c in result["cols"]]
+        rows = [tuple(None if isinstance(v, dict) and v.get("type") == "null" else v.get("value", v)
+                      for v in row) for row in result["rows"]]
+        return desc, rows
+
+    def execute(self, sql, params=None):
+        return self.cursor().execute(sql, params)
+
+    def cursor(self):
+        return TursoCursor(self)
 
     def commit(self):
         pass
