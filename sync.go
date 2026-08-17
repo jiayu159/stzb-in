@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	_ "embed"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -17,6 +18,9 @@ import (
 	"stzbHelper/global"
 	"stzbHelper/model"
 )
+
+//go:embed turso.json
+var embeddedTursoJSON []byte
 
 // Turso 云数据库增量同步器
 // 配置: exe 同目录 turso.json {"url":"https://xxx.turso.io","token":"..."}，文件缺失时同步禁用
@@ -58,14 +62,21 @@ var (
 )
 
 func initSync() {
+	// 优先读 exe 同目录外部 turso.json(便于换库/换 token)，缺失时使用编译嵌入的配置
+	var data []byte
 	exePath, err := os.Executable()
-	if err != nil {
-		return
+	if err == nil {
+		cfgPath := filepath.Join(filepath.Dir(exePath), "turso.json")
+		data, err = os.ReadFile(cfgPath)
+		if err != nil {
+			log.Println("同步器: 未找到外部 turso.json，使用内置配置")
+		}
 	}
-	cfgPath := filepath.Join(filepath.Dir(exePath), "turso.json")
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		log.Println("同步器: 未找到 turso.json，云同步禁用")
+	if len(data) == 0 {
+		data = embeddedTursoJSON
+	}
+	if len(data) == 0 {
+		log.Println("同步器: 无 turso 配置，云同步禁用")
 		return
 	}
 	var cfg tursoConfig

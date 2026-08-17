@@ -4,6 +4,9 @@ build/
 !build/bin/stzbHelper-wails.exe
 frontend/dist/
 
+# 云同步凭据(嵌入 exe 编译，禁止提交)
+/turso.json
+
 # 依赖
 node_modules/
 

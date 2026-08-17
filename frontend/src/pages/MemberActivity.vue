@@ -1,7 +1,7 @@
 <script setup>
-import { ref, onMounted } from 'vue'
-import { NCard, NButton, NSpin, NEmpty, NTag, NDataTable, NPagination, NGi, NGrid, NStatistic, NSpace, useMessage } from 'naive-ui'
-import { GetMemberActivity } from '../../wailsjs/go/main/App'
+import { ref, computed, onMounted, h } from 'vue'
+import { NCard, NButton, NSpin, NEmpty, NTag, NDataTable, NPagination, NGi, NGrid, NStatistic, NSpace, NRadioGroup, NRadioButton, useMessage } from 'naive-ui'
+import { GetMemberActivity, GetWeeklyActivity } from '../../wailsjs/go/main/App'
 import { RefreshCw, Download, Users, Activity, Clock } from 'lucide-vue-next'
 import * as XLSX from 'xlsx'
 
@@ -11,10 +11,15 @@ const members = ref([])
 const page = ref(1)
 const pageSize = ref(50)
 const total = ref(0)
+const mode = ref('week')        // week=每周活跃度 season=赛季总活跃度
+const weekOffset = ref(0)       // 0=本周 -1=上周 -2=前两周
+
+const weekLabels = { 0: '本周', [-1]: '上周', [-2]: '前两周' }
 
 const loadData = () => {
     loading.value = true
-    GetMemberActivity().then(v => {
+    const p = mode.value === 'week' ? GetWeeklyActivity(weekOffset.value) : GetMemberActivity()
+    p.then(v => {
         let r = JSON.parse(v)
         if (r.code == 200) {
             members.value = r.data || []
@@ -25,36 +30,42 @@ const loadData = () => {
 
 onMounted(loadData)
 
+const switchMode = () => { page.value = 1; loadData() }
+const switchWeek = () => { page.value = 1; loadData() }
+
 const exportExcel = () => {
     if (members.value.length === 0) {
         nmessage.warning('没有数据可导出')
         return
     }
     let data = []
-    data.push(['排名', '名称', '分组', '武勋', '势力', '进攻场次', '防守场次', '总场次', '翻地次数', '加入天数', '最近参战', '24h在线', '活跃度', '活跃等级'])
+    const head = mode.value === 'week'
+        ? ['排名', '名称', '分组', '周贡献', '进攻场次', '防守场次', '总场次', '翻地次数', '最近参战', '24h在线', '活跃度', '活跃等级']
+        : ['排名', '名称', '分组', '武勋', '势力', '进攻场次', '防守场次', '总场次', '翻地次数', '加入天数', '最近参战', '24h在线', '活跃度', '活跃等级']
+    data.push(head)
     members.value.forEach((m, i) => {
         const s = m.score || 0
-        data.push([
-            i + 1,
-            m.name,
-            m.group || '-',
-            m.wu || 0,
-            m.power || 0,
-            m.atk_count || 0,
-            m.def_count || 0,
-            m.total_bat || 0,
-            m.land_count || 0,
-            m.join_days || 0,
-            formatTime(m.last_time),
-            m.active_24h ? '在线' : '离线',
-            s.toFixed(1),
-            scoreLabel(s),
-        ])
+        if (mode.value === 'week') {
+            data.push([
+                i + 1, m.name, m.group || '-', m.contribute_week || 0,
+                m.atk_count || 0, m.def_count || 0, m.total_bat || 0, m.land_count || 0,
+                formatTime(m.last_time), m.active_24h ? '在线' : '离线',
+                s.toFixed(1), scoreLabel(s),
+            ])
+        } else {
+            data.push([
+                i + 1, m.name, m.group || '-', m.wu || 0, m.power || 0,
+                m.atk_count || 0, m.def_count || 0, m.total_bat || 0, m.land_count || 0,
+                m.join_days || 0, formatTime(m.last_time), m.active_24h ? '在线' : '离线',
+                s.toFixed(1), scoreLabel(s),
+            ])
+        }
     })
     const ws = XLSX.utils.aoa_to_sheet(data)
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, '活跃度')
-    XLSX.writeFile(wb, `活跃度分析_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
+    const prefix = mode.value === 'week' ? `每周活跃度_${weekLabels[weekOffset.value]}` : '赛季活跃度'
+    XLSX.writeFile(wb, `${prefix}_${new Date().toLocaleDateString().replace(/\//g, '-')}.xlsx`)
     nmessage.success('导出成功')
 }
 
@@ -84,52 +95,67 @@ const tableData = computed(() => {
     return members.value.slice(start, start + pageSize.value)
 })
 
-import { computed } from 'vue'
-
-const columns = [
-    { title: '排名', key: 'idx', width: 60, align: 'center',
-        render: (_, i) => (page.value - 1) * pageSize.value + i + 1
-    },
-    { title: '名称', key: 'name', width: 120, ellipsis: { tooltip: true } },
-    { title: '分组', key: 'group', width: 100,
-        render: (row) => row.group ? row.group : '-'
-    },
-    { title: '武勋', key: 'wu', width: 80, align: 'center', sorter: (a, b) => a.wu - b.wu },
-    { title: '势力', key: 'power', width: 70, align: 'center', sorter: (a, b) => a.power - b.power },
-    { title: '进攻场次', key: 'atk_count', width: 90, align: 'center', sorter: (a, b) => a.atk_count - b.atk_count },
-    { title: '防守场次', key: 'def_count', width: 90, align: 'center', sorter: (a, b) => a.def_count - b.def_count },
-    { title: '总场次', key: 'total_bat', width: 80, align: 'center', sorter: (a, b) => a.total_bat - b.total_bat },
-    { title: '翻地次数', key: 'land_count', width: 90, align: 'center', sorter: (a, b) => a.land_count - b.land_count,
-        render: (row) => (row.land_count || 0) > 0
-            ? h(NTag, { type: 'success', size: 'tiny', bordered: false }, () => row.land_count)
-            : '0'
-    },
-    { title: '加入天数', key: 'join_days', width: 80, align: 'center' },
-    { title: '最近参战', key: 'last_time', width: 140,
-        render: (row) => formatTime(row.last_time)
-    },
-    {
-        title: '24h在线', key: 'active_24h', width: 80, align: 'center',
-        render: (row) => row.active_24h
-            ? h(NTag, { type: 'success', size: 'tiny', bordered: false }, () => '在线')
-            : h(NTag, { type: 'default', size: 'tiny', bordered: false }, () => '离线')
-    },
-    {
-        title: '活跃度', key: 'score', width: 120, align: 'center',
-        sorter: (a, b) => a.score - b.score, defaultSortOrder: 'descend',
-        render: (row) => {
-            const s = row.score || 0
-            return h('div', { style: 'display:flex; align-items:center; gap:6px; justify-content:center;' }, [
-                h('div', { style: `width:60px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden;` }, [
-                    h('div', { style: `width:${Math.min(s, 100)}%; height:100%; background:${scoreColor(s)}; border-radius:3px; transition:width 0.3s;` })
-                ]),
-                h('span', { style: `font-weight:600; color:${scoreColor(s)}; font-size:12px;` }, s.toFixed(0))
-            ])
-        }
-    },
-]
-
-import { h } from 'vue'
+const columns = computed(() => {
+    const common = [
+        { title: '排名', key: 'idx', width: 60, align: 'center',
+            render: (_, i) => (page.value - 1) * pageSize.value + i + 1
+        },
+        { title: '名称', key: 'name', width: 120, ellipsis: { tooltip: true } },
+        { title: '分组', key: 'group', width: 100,
+            render: (row) => row.group ? row.group : '-'
+        },
+    ]
+    const stats = [
+        { title: '进攻场次', key: 'atk_count', width: 90, align: 'center', sorter: (a, b) => a.atk_count - b.atk_count },
+        { title: '防守场次', key: 'def_count', width: 90, align: 'center', sorter: (a, b) => a.def_count - b.def_count },
+        { title: '总场次', key: 'total_bat', width: 80, align: 'center', sorter: (a, b) => a.total_bat - b.total_bat },
+        { title: '翻地次数', key: 'land_count', width: 90, align: 'center', sorter: (a, b) => a.land_count - b.land_count,
+            render: (row) => (row.land_count || 0) > 0
+                ? h(NTag, { type: 'success', size: 'tiny', bordered: false }, () => row.land_count)
+                : '0'
+        },
+        { title: '最近参战', key: 'last_time', width: 140,
+            render: (row) => formatTime(row.last_time)
+        },
+        {
+            title: '24h在线', key: 'active_24h', width: 80, align: 'center',
+            render: (row) => row.active_24h
+                ? h(NTag, { type: 'success', size: 'tiny', bordered: false }, () => '在线')
+                : h(NTag, { type: 'default', size: 'tiny', bordered: false }, () => '离线')
+        },
+        {
+            title: '活跃度', key: 'score', width: 120, align: 'center',
+            sorter: (a, b) => a.score - b.score, defaultSortOrder: 'descend',
+            render: (row) => {
+                const s = row.score || 0
+                return h('div', { style: 'display:flex; align-items:center; gap:6px; justify-content:center;' }, [
+                    h('div', { style: 'width:60px; height:6px; background:#e5e7eb; border-radius:3px; overflow:hidden;' }, [
+                        h('div', { style: `width:${Math.min(s, 100)}%; height:100%; background:${scoreColor(s)}; border-radius:3px; transition:width 0.3s;` })
+                    ]),
+                    h('span', { style: `font-weight:600; color:${scoreColor(s)}; font-size:12px;` }, s.toFixed(0))
+                ])
+            }
+        },
+    ]
+    if (mode.value === 'week') {
+        return [
+            ...common,
+            { title: '周贡献', key: 'contribute_week', width: 90, align: 'center', defaultSortOrder: 'descend',
+              sorter: (a, b) => a.contribute_week - b.contribute_week,
+              render: (row) => (row.contribute_week || 0) > 0
+                  ? h(NTag, { type: 'warning', size: 'tiny', bordered: false }, () => row.contribute_week)
+                  : '0' },
+            ...stats,
+        ]
+    }
+    return [
+        ...common,
+        { title: '武勋', key: 'wu', width: 80, align: 'center', sorter: (a, b) => a.wu - b.wu },
+        { title: '势力', key: 'power', width: 70, align: 'center', sorter: (a, b) => a.power - b.power },
+        ...stats,
+        { title: '加入天数', key: 'join_days', width: 80, align: 'center' },
+    ]
+})
 </script>
 
 <template>
@@ -141,6 +167,15 @@ import { h } from 'vue'
                     <p class="page-desc">基于战报数据评估成员活跃度</p>
                 </div>
                 <n-space align="center">
+                    <n-radio-group v-model:value="mode" size="small" @update:value="switchMode">
+                        <n-radio-button value="week">每周活跃度</n-radio-button>
+                        <n-radio-button value="season">赛季总活跃度</n-radio-button>
+                    </n-radio-group>
+                    <n-radio-group v-if="mode === 'week'" v-model:value="weekOffset" size="small" @update:value="switchWeek">
+                        <n-radio-button :value="0">本周</n-radio-button>
+                        <n-radio-button :value="-1">上周</n-radio-button>
+                        <n-radio-button :value="-2">前两周</n-radio-button>
+                    </n-radio-group>
                     <n-button @click="loadData" :loading="loading">
                         <template #icon><RefreshCw :size="16" /></template>
                         刷新
@@ -156,6 +191,8 @@ import { h } from 'vue'
                 <template #header>使用说明</template>
                 活跃度评分基于以下数据综合计算：<br>
                  <strong>战报数 × 0.4 + 武勋/1000 × 0.3 + 24h在线 +20 + 日均战报 × 5</strong><br><br>
+                 <strong>每周活跃度</strong>：统计选定周（周一0点起7天）内的进攻/防守/翻地次数，按周贡献排序<br>
+                 <strong>赛季总活跃度</strong>：全赛季累计数据，按活跃度评分排序<br>
                  评分等级：<strong style="color:#22c55e">≥100 核心成员</strong> ｜ <strong style="color:#3b82f6">≥50 活跃</strong> ｜ <strong style="color:#f59e0b">≥20 普通</strong> ｜ <strong style="color:#ef4444">&lt;20 不活跃</strong><br>
                  翻地次数：本盟成员占领其他同盟领地（土地/要塞，不含沃土）的次数，依据战报中的"占领了/拆除"描述统计（不计入活跃度评分）<br>
                  数据需要先同步成员（同盟成员页面）并抓取战报后才会更新

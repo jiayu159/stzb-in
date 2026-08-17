@@ -1759,6 +1759,122 @@ func (a *App) GetMemberActivity() string {
 	return global.Response{Data: results}.Success()
 }
 
+// weekStartUnix 指定周(周一0点)起始时间戳，offset: 0=本周, -1=上周
+func weekStartUnix(offset int) int64 {
+	now := time.Now()
+	weekday := (int(now.Weekday()) + 6) % 7 // 周一=0
+	monday := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, now.Location()).AddDate(0, 0, -weekday+7*offset)
+	return monday.Unix()
+}
+
+// GetWeeklyActivity 每周活跃度: 指定周(周一0点起7天)的参战/翻地统计 + 周贡献
+func (a *App) GetWeeklyActivity(weekOffset int) string {
+	type ActivityItem struct {
+		Name            string  `json:"name"`
+		Group           string  `json:"group"`
+		ContributeWeek  int     `json:"contribute_week"`
+		Wu              int     `json:"wu"`
+		Power           int     `json:"power"`
+		AtkCount        int64   `json:"atk_count"`
+		DefCount        int64   `json:"def_count"`
+		TotalBat        int64   `json:"total_bat"`
+		LandCount       int64   `json:"land_count"`
+		LastTime        int64   `json:"last_time"`
+		JoinDays        int64   `json:"join_days"`
+		Active24h       bool    `json:"active_24h"`
+		Score           float64 `json:"score"`
+	}
+
+	var members []model.TeamUser
+	model.Conn.Find(&members)
+
+	start := weekStartUnix(weekOffset)
+	end := start + 7*86400
+
+	myUnion := a.resolveMyUnion()
+	var landCounts []struct {
+		AttackName string
+		Cnt        int64
+	}
+	model.Conn.Raw(`SELECT attack_name, COUNT(*) AS cnt FROM battle_report
+		WHERE (
+			(battle_desc != '' AND (battle_desc LIKE '%占领了%' OR battle_desc LIKE '%拆除%') AND battle_desc NOT LIKE '%沃土%')
+			OR
+			(battle_desc = '' AND wid_name LIKE '土地%' AND wid_name NOT LIKE '%沃土%')
+		)
+		AND attack_name IN (SELECT name FROM team_user WHERE name != '')
+		AND defend_union_name != '' AND defend_union_name != ?
+		AND npc = 0
+		AND result IN (1,2,3,4,10,18,19)
+		AND time >= ? AND time < ?
+		GROUP BY attack_name`, myUnion, start, end).Scan(&landCounts)
+	landMap := make(map[string]int64, len(landCounts))
+	for _, lc := range landCounts {
+		landMap[lc.AttackName] = lc.Cnt
+	}
+
+	cutoff := time.Now().Add(-24 * time.Hour).Unix()
+	now := time.Now().Unix()
+
+	var results []ActivityItem
+	for _, m := range members {
+		var atkCount, defCount int64
+		var brAtk, brDef int64
+		var lastTime int64
+
+		model.Conn.Model(&model.BattleReport{}).Where("attack_name = ? AND time >= ? AND time < ?", m.Name, start, end).Count(&brAtk)
+		model.Conn.Model(&model.BattleReport{}).Where("defend_name = ? AND time >= ? AND time < ?", m.Name, start, end).Count(&brDef)
+		model.Conn.Model(&model.BattleReport{}).Where("(attack_name = ? OR defend_name = ?) AND time >= ? AND time < ?", m.Name, m.Name, start, end).
+			Select("COALESCE(MAX(time), 0)").Scan(&lastTime)
+
+		var rptAtk int64
+		var rptLast int64
+		model.Conn.Model(&model.Report{}).Where("attack_name = ? AND time >= ? AND time < ?", m.Name, start, end).Count(&rptAtk)
+		model.Conn.Model(&model.Report{}).Where("attack_name = ? AND time >= ? AND time < ?", m.Name, start, end).
+			Select("COALESCE(MAX(time), 0)").Scan(&rptLast)
+
+		atkCount = brAtk + rptAtk
+		defCount = brDef
+		if rptLast > lastTime {
+			lastTime = rptLast
+		}
+
+		active24h := lastTime >= cutoff
+		totalBat := atkCount + defCount
+		joinDays := int64(0)
+		if m.JoinTime > 0 {
+			joinDays = (now - int64(m.JoinTime)) / 86400
+			if joinDays < 1 {
+				joinDays = 1
+			}
+		}
+
+		score := float64(totalBat)*0.4 + float64(m.Wu)/1000*0.3
+		if active24h {
+			score += 20
+		}
+		if joinDays > 0 {
+			score += float64(totalBat) / float64(joinDays) * 5
+		}
+
+		results = append(results, ActivityItem{
+			Name: m.Name, Group: m.Group, ContributeWeek: m.ContributeWeek, Wu: m.Wu, Power: m.Power,
+			AtkCount: atkCount, DefCount: defCount, TotalBat: totalBat,
+			LandCount: landMap[m.Name], LastTime: lastTime, JoinDays: joinDays, Active24h: active24h, Score: score,
+		})
+	}
+
+	// 每周模式按周贡献排序，其次活跃度
+	sort.Slice(results, func(i, j int) bool {
+		if results[i].ContributeWeek != results[j].ContributeWeek {
+			return results[i].ContributeWeek > results[j].ContributeWeek
+		}
+		return results[i].Score > results[j].Score
+	})
+
+	return global.Response{Data: results}.Success()
+}
+
 // GetHotRank 获取热门队伍排行（含战法搭配）
 func (a *App) GetHotRank() string {
 	type TeamEntry struct {

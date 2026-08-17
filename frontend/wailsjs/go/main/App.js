@@ -206,6 +206,10 @@ export function GetVersion() {
   return window['go']['main']['App']['GetVersion']();
 }
 
+export function GetWeeklyActivity(arg1) {
+  return window['go']['main']['App']['GetWeeklyActivity'](arg1);
+}
+
 export function Greet(arg1) {
   return window['go']['main']['App']['Greet'](arg1);
 }

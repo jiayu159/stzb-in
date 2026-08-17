@@ -103,6 +103,8 @@ export function GetUnionMemberTopTeams(arg1:number,arg2:number,arg3:number):Prom
 
 export function GetVersion():Promise<string>;
 
+export function GetWeeklyActivity(arg1:number):Promise<string>;
+
 export function Greet(arg1:string):Promise<string>;
 
 export function ImportDb(arg1:string,arg2:Array<number>):Promise<string>;
