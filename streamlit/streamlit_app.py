@@ -282,7 +282,7 @@ def format_ts(ts):
 
 @st.cache_data(ttl=10, show_spinner=False)
 def query_member_teams(min_hp=0, name=""):
-    """同盟成员常用队伍：每名成员出现次数最多的一个队伍"""
+    """同盟成员常用队伍：默认每名成员最新一个队伍；搜索具体玩家时按阵容分组显示其全部队伍"""
     conn = get_conn()
     name_cond = "AND attack_name LIKE ?" if name else ""
     name_cond2 = "AND defend_name LIKE ?" if name else ""
@@ -290,6 +290,8 @@ def query_member_teams(min_hp=0, name=""):
         params = [f"%{name}%", min_hp, f"%{name}%", min_hp]
     else:
         params = [min_hp, min_hp]
+    part_by = "PARTITION BY player_name, h1, h2, h3" if name else "PARTITION BY player_name"
+    order_by = "team_count DESC, l.player_name" if name else "l.player_name"
     sql = f"""
     WITH member_rows AS (
         SELECT attack_name AS player_name, attack_hero1_id AS h1, attack_hero2_id AS h2, attack_hero3_id AS h3,
@@ -317,14 +319,14 @@ def query_member_teams(min_hp=0, name=""):
           AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
     ),
     latest AS (
-        SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY time DESC) AS rn
+        SELECT *, ROW_NUMBER() OVER ({part_by} ORDER BY time DESC) AS rn
         FROM member_rows
     )
     SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
            l.all_skill_info, l.gear_info, l.role,
            (SELECT COUNT(*) FROM member_rows m2
             WHERE m2.player_name = l.player_name AND m2.h1 = l.h1 AND m2.h2 = l.h2 AND m2.h3 = l.h3) AS team_count
-    FROM latest l WHERE l.rn = 1 ORDER BY l.player_name"""
+    FROM latest l WHERE l.rn = 1 ORDER BY {order_by}"""
     return pd.read_sql_query(sql, conn, params=params)
 
 
@@ -342,6 +344,8 @@ def query_enemy_teams(min_hp=0, name=""):
     if name:
         params += [f"%{name}%"]
     params += [min_hp]
+    part_by = "PARTITION BY player_name, h1, h2, h3" if name else "PARTITION BY player_name"
+    order_by = "l.player_name, encounter_count DESC" if name else "encounter_count DESC"
     sql = f"""
     WITH enemy_encounters AS (
         SELECT defend_name AS player_name, defend_hero1_id AS h1, defend_hero2_id AS h2, defend_hero3_id AS h3,
@@ -367,7 +371,7 @@ def query_enemy_teams(min_hp=0, name=""):
           AND attack_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
     ),
     latest AS (
-        SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY time DESC) AS rn
+        SELECT *, ROW_NUMBER() OVER ({part_by} ORDER BY time DESC) AS rn
         FROM enemy_encounters
     )
     SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
@@ -375,7 +379,7 @@ def query_enemy_teams(min_hp=0, name=""):
            (SELECT COUNT(*) FROM enemy_encounters e2
             WHERE e2.player_name = l.player_name AND e2.h1 = l.h1 AND e2.h2 = l.h2 AND e2.h3 = l.h3) AS encounter_count
     FROM latest l WHERE l.rn = 1
-    ORDER BY encounter_count DESC"""
+    ORDER BY {order_by}"""
     return pd.read_sql_query(sql, conn, params=params)
 
 
