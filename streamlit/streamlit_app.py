@@ -410,6 +410,8 @@ def query_enemy_teams(min_hp=0, name=""):
     sql = f"""
     WITH enemy_encounters AS (
         SELECT defend_name AS player_name, defend_hero1_id AS h1, defend_hero2_id AS h2, defend_hero3_id AS h3,
+               defend_hero1_level AS l1, defend_hero2_level AS l2, defend_hero3_level AS l3,
+               defend_hero1_star AS s1, defend_hero2_star AS s2, defend_hero3_star AS s3,
                defend_total_star AS total_star, defend_hp AS hp, time, all_skill_info,
                defender_gear_info AS gear_info, 'defend' AS role
         FROM battle_report
@@ -421,6 +423,8 @@ def query_enemy_teams(min_hp=0, name=""):
           AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
         UNION ALL
         SELECT attack_name, attack_hero1_id, attack_hero2_id, attack_hero3_id,
+               attack_hero1_level, attack_hero2_level, attack_hero3_level,
+               attack_hero1_star, attack_hero2_star, attack_hero3_star,
                attack_total_star, attack_hp, time, all_skill_info,
                attacker_gear_info, 'attack'
         FROM battle_report
