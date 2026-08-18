@@ -58,6 +58,7 @@ var (
 	syncLastErr   string
 	syncNotifyCh  = make(chan struct{}, 1)
 	syncRunning   bool
+	syncWaitingDB bool // 等待数据库打开(临时)，由 StartSyncLoop 循环重试 initSync
 	syncHTTP      = &http.Client{Timeout: 30 * time.Second}
 )
 
@@ -77,11 +78,13 @@ func initSync() {
 	}
 	if len(data) == 0 {
 		log.Println("同步器: 无 turso 配置，云同步禁用")
+		syncWaitingDB = false
 		return
 	}
 	var cfg tursoConfig
 	if err := json.Unmarshal(data, &cfg); err != nil || cfg.URL == "" || cfg.Token == "" {
 		log.Println("同步器: turso.json 格式错误(url/token 不能为空)，云同步禁用")
+		syncWaitingDB = false
 		return
 	}
 	syncCfg = cfg
@@ -92,23 +95,33 @@ func initSync() {
 	if syncCfg.AllowedDb != "" {
 		cur := strings.TrimSuffix(global.CurrentDbName, ".db")
 		if cur == "" {
+			// 数据库还没打开，属于临时状态: 由 StartSyncLoop 循环重试 initSync
+			syncWaitingDB = true
 			log.Println("同步器: 数据库未打开，云同步等待")
 			return
 		}
 		if !strings.Contains(cur, syncCfg.AllowedDb) {
 			log.Printf("同步器: 当前数据库 %q 与配置允许的 %q 不匹配，云同步已禁用", cur, syncCfg.AllowedDb)
+			syncWaitingDB = false
 			return
 		}
 	}
+	syncWaitingDB = false
 	syncEnabled = true
 	log.Printf("同步器: 已启用，目标 %s", syncCfg.URL)
 }
 
-// StartSyncLoop 后台同步循环: 启动即同步一次，之后每 30 秒或收到入库信号时同步
+// StartSyncLoop 后台同步循环: 数据库未打开时每 5 秒重试初始化，就绪后同步一次，之后每 30 秒或收到入库信号时同步
 func StartSyncLoop() {
-	initSync()
-	if !syncEnabled {
-		return
+	for {
+		initSync()
+		if syncEnabled {
+			break
+		}
+		if !syncWaitingDB {
+			return // 永久禁用(无配置/格式错/库名不匹配)
+		}
+		time.Sleep(5 * time.Second)
 	}
 	if model.Conn == nil {
 		log.Println("同步器: 数据库未连接，等待")
