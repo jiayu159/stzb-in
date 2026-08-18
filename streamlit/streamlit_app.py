@@ -227,11 +227,10 @@ def parse_skills(all_skill_info):
     return parsed
 
 
-def parse_gears(gear_info):
-    """解析宝物: 'gearId,level,entryId;...' -> 每武将 [宝物名]，防守方倒序"""
+def parse_gears(gear_info, role="attack"):
+    """解析宝物: 'gearId,level,entryId;...' -> 每武将 [宝物名]，防守方倒序(role 由 all_skill_info 的 idx 决定)"""
     if not gear_info:
         return []
-    role = team_role(gear_info) if ";" in str(gear_info) else "attack"
     groups = [g for g in str(gear_info).split(";") if g.strip()]
     parsed = []
     for g in groups:
@@ -250,8 +249,9 @@ def parse_gears(gear_info):
 
 def team_card_html(row):
     """把一行队伍渲染成 HTML 卡片(头像+武将名+战法+宝物)，与桌面 TeamCard 一致"""
+    role = team_role(row.get("all_skill_info"))
     skills = parse_skills(row.get("all_skill_info"))
-    gears = parse_gears(row.get("gear_info"))
+    gears = parse_gears(row.get("gear_info"), role)
     hero_ids = [row.get(f"h{i}") for i in (1, 2, 3)]
     cells = []
     for i, hid in enumerate(hero_ids):
@@ -317,18 +317,15 @@ def query_member_teams(min_hp=0, name=""):
           AND defend_hero1_level >= 15 AND defend_hero2_level >= 15 AND defend_hero3_level >= 15
           AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
     ),
-    team_counts AS (
-        SELECT player_name, h1, h2, h3, COUNT(*) AS team_count,
-               MAX(total_star) AS total_star, MAX(hp) AS hp, MAX(time) AS last_time,
-               MAX(all_skill_info) AS all_skill_info, MAX(gear_info) AS gear_info
-        FROM member_rows GROUP BY player_name, h1, h2, h3
-    ),
-    ranked AS (
-        SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY team_count DESC, last_time DESC) AS rn
-        FROM team_counts
+    latest AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY time DESC) AS rn
+        FROM member_rows
     )
-    SELECT player_name, h1, h2, h3, total_star, hp, team_count, last_time, all_skill_info, gear_info
-    FROM ranked WHERE rn = 1 ORDER BY player_name"""
+    SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
+           l.all_skill_info, l.gear_info,
+           (SELECT COUNT(*) FROM member_rows m2
+            WHERE m2.player_name = l.player_name AND m2.h1 = l.h1 AND m2.h2 = l.h2 AND m2.h3 = l.h3) AS team_count
+    FROM latest l WHERE l.rn = 1 ORDER BY l.player_name"""
     return pd.read_sql_query(sql, conn, params=params)
 
 
@@ -369,10 +366,16 @@ def query_enemy_teams(min_hp=0, name=""):
           {name_cond2}
           AND attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
           AND attack_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
+    ),
+    latest AS (
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name ORDER BY time DESC) AS rn
+        FROM enemy_encounters
     )
-    SELECT player_name, h1, h2, h3, total_star, hp, COUNT(*) AS encounter_count, MAX(time) AS last_time,
-           MAX(all_skill_info) AS all_skill_info, MAX(gear_info) AS gear_info
-    FROM enemy_encounters GROUP BY player_name, h1, h2, h3
+    SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
+           l.all_skill_info, l.gear_info,
+           (SELECT COUNT(*) FROM enemy_encounters e2
+            WHERE e2.player_name = l.player_name AND e2.h1 = l.h1 AND e2.h2 = l.h2 AND e2.h3 = l.h3) AS encounter_count
+    FROM latest l WHERE l.rn = 1
     ORDER BY encounter_count DESC"""
     return pd.read_sql_query(sql, conn, params=params)
 
@@ -574,7 +577,7 @@ elif page == "同盟成员常用队伍":
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
         csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], team_role(r["all_skill_info"]))), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
 
 elif page == "敌军队伍":
@@ -601,7 +604,7 @@ elif page == "敌军队伍":
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
         csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], team_role(r["all_skill_info"]))), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
 
 elif page == "成员活跃度":
