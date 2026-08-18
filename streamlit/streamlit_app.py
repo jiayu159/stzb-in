@@ -227,29 +227,30 @@ def parse_skills(all_skill_info, role="attack"):
     return parsed
 
 
-def parse_gears(gear_info):
+def parse_gears(gear_info, role="attack"):
     """解析宝物: 'gearId,level,entryId;...' -> 每武将 [宝物名]。
-    宝物无 idx 前缀，组 N 即对应武将 N(与 hero1/2/3 同序，攻守均不反转)"""
+    与桌面 TeamCard 一致: 先丢弃空组(gearId=0)，防守方整列反转"""
     if not gear_info:
         return []
     parsed = []
     for g in str(gear_info).split(";"):
         parts = g.split(",")
         if not parts[0] or parts[0] == "0":
-            parsed.append("")
             continue
         name = gear_name(parts[0])
         if len(parts) > 2 and parts[2] and parts[2] != "0":
             name += f"[{gear_entry_name(parts[2])}]"
         parsed.append(name)
-    return parsed[:3]
+    if role == "defend":
+        parsed.reverse()
+    return parsed
 
 
 def team_card_html(row):
     """把一行队伍渲染成 HTML 卡片(头像+武将名+战法+宝物)，与桌面 TeamCard 一致"""
     role = row.get("role") or team_role(row.get("all_skill_info"))
     skills = parse_skills(row.get("all_skill_info"), role)
-    gears = parse_gears(row.get("gear_info"))
+    gears = parse_gears(row.get("gear_info"), role)
     hero_ids = [row.get(f"h{i}") for i in (1, 2, 3)]
     cells = []
     for i, hid in enumerate(hero_ids):
@@ -575,7 +576,7 @@ elif page == "同盟成员常用队伍":
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
         csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"], r["role"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], r["role"])), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
 
 elif page == "敌军队伍":
@@ -602,7 +603,7 @@ elif page == "敌军队伍":
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
         csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"], r["role"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], r["role"])), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
 
 elif page == "成员活跃度":
