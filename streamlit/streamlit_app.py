@@ -202,11 +202,11 @@ def team_role(all_skill_info):
         return "attack"
 
 
-def parse_skills(all_skill_info):
-    """解析 all_skill_info: '1,id,lv,id,lv,id,lv;...' -> 每武将 [战法名...]，与桌面版一致"""
+def parse_skills(all_skill_info, role="attack"):
+    """解析 all_skill_info: '1,id,lv,id,lv,id,lv;...' -> 每武将 [战法名...]，与桌面版一致
+    role 由 SQL 行标记(attack/defend)决定，攻取 index 1-3、守取 4-6 且倒序"""
     if not all_skill_info:
         return []
-    role = team_role(all_skill_info)
     groups = [g for g in str(all_skill_info).split(";") if g.strip()]
     parsed = []
     for g in groups:
@@ -249,8 +249,8 @@ def parse_gears(gear_info, role="attack"):
 
 def team_card_html(row):
     """把一行队伍渲染成 HTML 卡片(头像+武将名+战法+宝物)，与桌面 TeamCard 一致"""
-    role = team_role(row.get("all_skill_info"))
-    skills = parse_skills(row.get("all_skill_info"))
+    role = row.get("role") or team_role(row.get("all_skill_info"))
+    skills = parse_skills(row.get("all_skill_info"), role)
     gears = parse_gears(row.get("gear_info"), role)
     hero_ids = [row.get(f"h{i}") for i in (1, 2, 3)]
     cells = []
@@ -297,7 +297,7 @@ def query_member_teams(min_hp=0, name=""):
                attack_hero1_level AS l1, attack_hero2_level AS l2, attack_hero3_level AS l3,
                attack_hero1_star AS s1, attack_hero2_star AS s2, attack_hero3_star AS s3,
                attack_total_star AS total_star, attack_hp AS hp, time, all_skill_info,
-               attacker_gear_info AS gear_info
+               attacker_gear_info AS gear_info, 'attack' AS role
         FROM battle_report
         WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
           {name_cond}
@@ -309,7 +309,7 @@ def query_member_teams(min_hp=0, name=""):
                defend_hero1_level, defend_hero2_level, defend_hero3_level,
                defend_hero1_star, defend_hero2_star, defend_hero3_star,
                defend_total_star, defend_hp, time, all_skill_info,
-               defender_gear_info
+               defender_gear_info, 'defend'
         FROM battle_report
         WHERE defend_name IN (SELECT name FROM team_user WHERE name != '')
           {name_cond2}
@@ -322,7 +322,7 @@ def query_member_teams(min_hp=0, name=""):
         FROM member_rows
     )
     SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
-           l.all_skill_info, l.gear_info,
+           l.all_skill_info, l.gear_info, l.role,
            (SELECT COUNT(*) FROM member_rows m2
             WHERE m2.player_name = l.player_name AND m2.h1 = l.h1 AND m2.h2 = l.h2 AND m2.h3 = l.h3) AS team_count
     FROM latest l WHERE l.rn = 1 ORDER BY l.player_name"""
@@ -347,7 +347,7 @@ def query_enemy_teams(min_hp=0, name=""):
     WITH enemy_encounters AS (
         SELECT defend_name AS player_name, defend_hero1_id AS h1, defend_hero2_id AS h2, defend_hero3_id AS h3,
                defend_total_star AS total_star, defend_hp AS hp, time, all_skill_info,
-               defender_gear_info AS gear_info
+               defender_gear_info AS gear_info, 'defend' AS role
         FROM battle_report
         WHERE attack_union_name = ?
           AND defend_name NOT IN (SELECT name FROM team_user WHERE name != '')
@@ -358,7 +358,7 @@ def query_enemy_teams(min_hp=0, name=""):
         UNION ALL
         SELECT attack_name, attack_hero1_id, attack_hero2_id, attack_hero3_id,
                attack_total_star, attack_hp, time, all_skill_info,
-               attacker_gear_info
+               attacker_gear_info, 'attack'
         FROM battle_report
         WHERE defend_union_name = ?
           AND attack_name NOT IN (SELECT name FROM team_user WHERE name != '')
@@ -372,7 +372,7 @@ def query_enemy_teams(min_hp=0, name=""):
         FROM enemy_encounters
     )
     SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
-           l.all_skill_info, l.gear_info,
+           l.all_skill_info, l.gear_info, l.role,
            (SELECT COUNT(*) FROM enemy_encounters e2
             WHERE e2.player_name = l.player_name AND e2.h1 = l.h1 AND e2.h2 = l.h2 AND e2.h3 = l.h3) AS encounter_count
     FROM latest l WHERE l.rn = 1
@@ -576,8 +576,8 @@ elif page == "同盟成员常用队伍":
                 st.session_state["mt_show"] = show + 50
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
-        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], team_role(r["all_skill_info"]))), axis=1)
+        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"], r["role"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], r["role"])), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
 
 elif page == "敌军队伍":
@@ -603,8 +603,8 @@ elif page == "敌军队伍":
                 st.session_state["et_show"] = show + 50
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
-        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], team_role(r["all_skill_info"]))), axis=1)
+        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"], r["role"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], r["role"])), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
 
 elif page == "成员活跃度":
