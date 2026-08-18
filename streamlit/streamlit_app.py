@@ -445,7 +445,8 @@ def query_battle_reports(name="", min_hp=0, limit=500):
         params.append(min_hp)
     where = " AND " + " AND ".join(cond) if cond else ""
     sql = f"""SELECT time, wid_name, attack_name, attack_union_name, defend_name, defend_union_name,
-                     attack_hp, defend_hp, garrison, result, attack_hero1_id, attack_hero2_id, attack_hero3_id
+                     attack_hp, defend_hp, garrison, result, attack_hero1_id, attack_hero2_id, attack_hero3_id,
+                     defend_hero1_id, defend_hero2_id, defend_hero3_id
               FROM battle_report WHERE 1=1{where}
               ORDER BY time DESC LIMIT ?"""
     return pd.read_sql_query(sql, conn, params=params + [limit])
@@ -536,15 +537,18 @@ if page == "战报查询":
         st.success(f"共 {len(df)} 条")
         df_disp = df.copy()
         df_disp["进攻阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"attack_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
+        df_disp["防守阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"defend_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
         df_disp["最近时间"] = df_disp["time"].apply(format_ts)
         st.dataframe(df_disp[["最近时间", "wid_name", "attack_name", "attack_union_name", "defend_name",
-                              "defend_union_name", "attack_hp", "defend_hp", "garrison", "result", "进攻阵容"]].rename(
+                              "defend_union_name", "attack_hp", "defend_hp", "garrison", "result",
+                              "进攻阵容", "防守阵容"]].rename(
             columns={"wid_name": "地点", "attack_name": "进攻方", "attack_union_name": "进攻方同盟",
                      "defend_name": "防守方", "defend_union_name": "防守方同盟", "attack_hp": "攻方兵力",
                      "defend_hp": "守方兵力", "garrison": "类型", "result": "结果"}),
             use_container_width=True, hide_index=True)
         csv = df.copy()
         csv["进攻阵容"] = df_disp["进攻阵容"]
+        csv["防守阵容"] = df_disp["防守阵容"]
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "battle_reports.csv")
 
 elif page == "同盟成员常用队伍":
