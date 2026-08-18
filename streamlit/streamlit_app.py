@@ -203,8 +203,8 @@ def team_role(all_skill_info):
 
 
 def parse_skills(all_skill_info, role="attack"):
-    """解析 all_skill_info: '1,id,lv,id,lv,id,lv;...' -> 每武将 [战法名...]，与桌面版一致
-    role 由 SQL 行标记(attack/defend)决定，攻取 index 1-3、守取 4-6 且倒序"""
+    """解析 all_skill_info: '1,id,lv,id,lv,id,lv;...' -> 每武将 [{name,lv,quality,type}...]，
+    与桌面版一致: 攻取 index 1-3、守取 4-6 且倒序"""
     if not all_skill_info:
         return []
     groups = [g for g in str(all_skill_info).split(";") if g.strip()]
@@ -221,14 +221,19 @@ def parse_skills(all_skill_info, role="attack"):
             continue
         if role == "defend" and not (4 <= idx <= 6):
             continue
-        parsed.append([skill_name(parts[1]), skill_name(parts[3]), skill_name(parts[5])])
+        infos = []
+        for i in (1, 3, 5):
+            sid, lv = parts[i], parts[i + 1]
+            if sid and sid != "0":
+                infos.append(skill_info(sid, lv))
+        parsed.append(infos)
     if role == "defend":
         parsed.reverse()
     return parsed
 
 
 def parse_gears(gear_info, role="attack"):
-    """解析宝物: 'gearId,level,entryId;...' -> 每武将 [宝物名]。
+    """解析宝物: 'gearId,level,entryId;...' -> 每武将 [{name,lv,entry,entry_quality,entry_advance}]。
     与桌面 TeamCard 一致: 先丢弃空组(gearId=0)，防守方整列反转"""
     if not gear_info:
         return []
@@ -237,33 +242,88 @@ def parse_gears(gear_info, role="attack"):
         parts = g.split(",")
         if not parts[0] or parts[0] == "0":
             continue
-        name = gear_name(parts[0])
-        if len(parts) > 2 and parts[2] and parts[2] != "0":
-            name += f"[{gear_entry_name(parts[2])}]"
-        parsed.append(name)
+        entry = parts[2] if len(parts) > 2 and parts[2] and parts[2] != "0" else ""
+        parsed.append({
+            "name": gear_name(parts[0]),
+            "lv": parts[1],
+            "entry": gear_entry_name(entry) if entry else "",
+            "entry_quality": gear_entry_quality(entry) if entry else 0,
+            "entry_advance": gear_entry_advance(entry) if entry else 0,
+        })
     if role == "defend":
         parsed.reverse()
     return parsed
 
 
+def skill_info(sid, lv=""):
+    """技能信息(名称/等级/品质/类型)，缺失时显示未知"""
+    c = skill_cfg.get(str(sid), {})
+    return {"id": str(sid), "name": c.get("name") or f"未知({sid})",
+            "lv": lv, "quality": c.get("zfQuality", ""), "type": c.get("type", "")}
+
+
+def gear_entry_quality(eid):
+    c = gear_feature_cfg.get(str(eid), {})
+    return int(c.get("quality", 0) or 0)
+
+
+def gear_entry_advance(eid):
+    c = gear_feature_cfg.get(str(eid), {})
+    return int(c.get("advance", 0) or 0)
+
+
 def team_card_html(row):
-    """把一行队伍渲染成 HTML 卡片(头像+武将名+战法+宝物)，与桌面 TeamCard 一致"""
+    """把一行队伍渲染成 HTML 卡片(头像+武将名+Lv/红度+战法等级/品质+宝物等级/颜色)，与桌面 TeamCard 一致"""
     role = row.get("role") or team_role(row.get("all_skill_info"))
     skills = parse_skills(row.get("all_skill_info"), role)
     gears = parse_gears(row.get("gear_info"), role)
     hero_ids = [row.get(f"h{i}") for i in (1, 2, 3)]
+    hero_lvs = [row.get(f"l{i}") or "" for i in (1, 2, 3)]
+    hero_stars = [row.get(f"s{i}") or 0 for i in (1, 2, 3)]
+
+    def gear_color(g):
+        if g.get("entry_advance") == 1:
+            return "#e33"
+        if g.get("entry_quality", 0) >= 8:
+            return "#e07bb8"
+        return "#4a90d9"
+
+    def skill_badge(q):
+        if q == "S":
+            return "<span style='background:#ff8c00;color:#fff;border-radius:3px;font-size:10px;padding:0 3px;margin-right:3px'>S</span>"
+        if q == "A":
+            return "<span style='background:#4a90d9;color:#fff;border-radius:3px;font-size:10px;padding:0 3px;margin-right:3px'>A</span>"
+        if q == "B":
+            return "<span style='background:#8a8a8a;color:#fff;border-radius:3px;font-size:10px;padding:0 3px;margin-right:3px'>B</span>"
+        return ""
+
     cells = []
     for i, hid in enumerate(hero_ids):
         if not hid or str(hid) == "0":
-            cells.append("<div style='width:200px;text-align:center;color:#999'>?</div>")
+            cells.append("<div style='width:210px;text-align:center;color:#999'>?</div>")
             continue
-        sk = "".join(f"<div style='font-size:11px;color:#444'>{n}</div>" for n in (skills[i] if i < len(skills) else []))
-        gs = (gears[i] if i < len(gears) else "") or ""
-        gd = f"<div style='font-size:11px;color:#b8860b'>宝物: {gs}</div>" if gs else ""
+        sk_parts = []
+        for s in (skills[i] if i < len(skills) else []):
+            sk_parts.append(
+                f"<div style='font-size:11px;color:#333;white-space:nowrap'>{skill_badge(s.get('quality',''))}"
+                f"{s.get('type','')} {s.get('name','')} "
+                f"<span style='color:#888'>Lv.{s.get('lv','')}</span></div>"
+            )
+        sk = "".join(sk_parts)
+        g = gears[i] if i < len(gears) else None
+        if g and g.get("name"):
+            entry_html = f"[<span style='color:{gear_color(g)}'>{g['entry']}</span>]" if g.get("entry") else ""
+            gd = (f"<div style='font-size:11px;color:#b8860b;white-space:nowrap'>宝物: "
+                  f"<span style='color:{gear_color(g)};font-weight:600'>{g['name']}</span>{entry_html} "
+                  f"<span style='color:#888'>Lv.{g.get('lv','')}</span></div>")
+        else:
+            gd = ""
         cells.append(
-            f"<div style='width:200px;text-align:center'>"
+            f"<div style='width:210px;text-align:center'>"
             f"<img src='{hero_icon_url(hid)}' style='width:56px;height:56px;object-fit:cover;border-radius:8px' onerror=\"this.style.display='none'\">"
-            f"<div style='font-weight:600'>{hero_name(hid)}</div>{sk}{gd}</div>"
+            f"<div style='font-weight:600'>{hero_name(hid)} "
+            f"<span style='color:#888;font-weight:400'>Lv.{hero_lvs[i]} · {hero_stars[i]}红</span></div>"
+            f"{sk}{gd}</div>"
         )
     return f"<div style='display:flex;gap:8px;padding:8px;border:1px solid #ddd;border-radius:10px;margin:6px 0'>{''.join(cells)}</div>"
 
@@ -322,7 +382,8 @@ def query_member_teams(min_hp=0, name=""):
         SELECT *, ROW_NUMBER() OVER ({part_by} ORDER BY time DESC) AS rn
         FROM member_rows
     )
-    SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
+    SELECT l.player_name, l.h1, l.h2, l.h3, l.l1, l.l2, l.l3, l.s1, l.s2, l.s3,
+           l.total_star, l.hp, l.time AS last_time,
            l.all_skill_info, l.gear_info, l.role,
            (SELECT COUNT(*) FROM member_rows m2
             WHERE m2.player_name = l.player_name AND m2.h1 = l.h1 AND m2.h2 = l.h2 AND m2.h3 = l.h3) AS team_count
@@ -374,7 +435,8 @@ def query_enemy_teams(min_hp=0, name=""):
         SELECT *, ROW_NUMBER() OVER ({part_by} ORDER BY time DESC) AS rn
         FROM enemy_encounters
     )
-    SELECT l.player_name, l.h1, l.h2, l.h3, l.total_star, l.hp, l.time AS last_time,
+    SELECT l.player_name, l.h1, l.h2, l.h3, l.l1, l.l2, l.l3, l.s1, l.s2, l.s3,
+           l.total_star, l.hp, l.time AS last_time,
            l.all_skill_info, l.gear_info, l.role,
            (SELECT COUNT(*) FROM enemy_encounters e2
             WHERE e2.player_name = l.player_name AND e2.h1 = l.h1 AND e2.h2 = l.h2 AND e2.h3 = l.h3) AS encounter_count
@@ -579,8 +641,12 @@ elif page == "同盟成员常用队伍":
                 st.session_state["mt_show"] = show + 50
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
-        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"], r["role"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], r["role"])), axis=1)
+        csv["战法"] = csv.apply(lambda r: " | ".join(
+            " / ".join(f"{s.get('name','')}Lv{s.get('lv','')}" for s in hero)
+            for hero in parse_skills(r["all_skill_info"], r["role"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(
+            g["name"] + (f"[{g['entry']}]" if g.get("entry") else "") + f"Lv{g.get('lv','')}"
+            for g in parse_gears(r["gear_info"], r["role"])), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
 
 elif page == "敌军队伍":
@@ -606,8 +672,12 @@ elif page == "敌军队伍":
                 st.session_state["et_show"] = show + 50
         csv = df.copy()
         csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
-        csv["战法"] = csv.apply(lambda r: " | ".join(" / ".join(s) for s in parse_skills(r["all_skill_info"], r["role"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(parse_gears(r["gear_info"], r["role"])), axis=1)
+        csv["战法"] = csv.apply(lambda r: " | ".join(
+            " / ".join(f"{s.get('name','')}Lv{s.get('lv','')}" for s in hero)
+            for hero in parse_skills(r["all_skill_info"], r["role"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(
+            g["name"] + (f"[{g['entry']}]" if g.get("entry") else "") + f"Lv{g.get('lv','')}"
+            for g in parse_gears(r["gear_info"], r["role"])), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
 
 elif page == "成员活跃度":
