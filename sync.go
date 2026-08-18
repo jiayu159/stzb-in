@@ -41,7 +41,7 @@ type syncTable struct {
 var syncTables = []syncTable{
 	{Name: "battle_report", PkColumn: "battle_id"},
 	{Name: "reports", PkColumn: "battle_id"},
-	{Name: "team_user", PkColumn: "id", ReplaceAll: true},
+	{Name: "team_user", PkColumn: "id", ReplaceAll: true}, // 按 name 刷新: 只删本批名字，云端他人记录保留(并集)
 }
 
 type syncStatus struct {
@@ -178,13 +178,28 @@ func syncOnce() {
 	log.Println("同步器: 本轮同步完成")
 }
 
-// syncTableDelta 同步单张表。ReplaceAll 表整表覆盖，其余按主键增量，失败不推进游标
+// syncTableDelta 同步单张表。ReplaceAll 表按 name 刷新(只删本地这批名字的云端旧记录，保留其他机器同步的成员)，
+// 其余按主键增量，失败不推进游标
 func syncTableDelta(t syncTable) error {
 	var lastID int64
 	if t.ReplaceAll {
-		if err := tursoExecute("DELETE FROM " + t.Name); err != nil {
-			return err
+		// 从本地读出全部成员名，云端仅删除这些名字的旧记录(分批)，避免本地是云端子集时整表覆盖丢失他人数据
+		var names []string
+		model.Conn.Model(&model.TeamUser{}).Where("name != ''").Pluck("name", &names)
+		for i := 0; i < len(names); i += 500 {
+			end := i + 500
+			if end > len(names) {
+				end = len(names)
+			}
+			var lits []string
+			for _, n := range names[i:end] {
+				lits = append(lits, sqlLiteral(n))
+			}
+			if err := tursoExecute("DELETE FROM team_user WHERE name IN (" + strings.Join(lits, ",") + ")"); err != nil {
+				return err
+			}
 		}
+		log.Printf("同步器: %s 按 name 刷新 %d 个成员", t.Name, len(names))
 		lastID = 0
 	} else {
 		var err error
