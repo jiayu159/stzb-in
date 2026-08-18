@@ -534,7 +534,18 @@ if page == "战报查询":
         with st.spinner("查询中..."):
             df = query_battle_reports(name, int(min_hp))
         st.success(f"共 {len(df)} 条")
-        st.dataframe(df, use_container_width=True, hide_index=True)
+        df_disp = df.copy()
+        df_disp["进攻阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"attack_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
+        df_disp["最近时间"] = df_disp["time"].apply(format_ts)
+        st.dataframe(df_disp[["最近时间", "wid_name", "attack_name", "attack_union_name", "defend_name",
+                              "defend_union_name", "attack_hp", "defend_hp", "garrison", "result", "进攻阵容"]].rename(
+            columns={"wid_name": "地点", "attack_name": "进攻方", "attack_union_name": "进攻方同盟",
+                     "defend_name": "防守方", "defend_union_name": "防守方同盟", "attack_hp": "攻方兵力",
+                     "defend_hp": "守方兵力", "garrison": "类型", "result": "结果"}),
+            use_container_width=True, hide_index=True)
+        csv = df.copy()
+        csv["进攻阵容"] = df_disp["进攻阵容"]
+        st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "battle_reports.csv")
 
 elif page == "同盟成员常用队伍":
     st.header("同盟成员常用队伍")
