@@ -159,15 +159,21 @@ def ensure_app_databases():
 @st.cache_data(ttl=30, show_spinner=False)
 def load_databases():
     """读取总表全部启用数据库(供侧边栏选择与连接)"""
-    conn = admin_conn()
+    try:
+        conn = admin_conn()
+    except Exception:
+        return []
     if conn is None:
         return []
-    ensure_app_databases()
-    cur = conn.execute(
-        "SELECT id, name, url, token, note, enabled FROM app_databases WHERE enabled = 1 ORDER BY id"
-    )
-    cols = [d[0] for d in cur.description]
-    return [dict(zip(cols, r)) for r in cur.fetchall()]
+    try:
+        ensure_app_databases()
+        cur = conn.execute(
+            "SELECT id, name, url, token, note, enabled FROM app_databases WHERE enabled = 1 ORDER BY id"
+        )
+        cols = [d[0] for d in cur.description]
+        return [dict(zip(cols, r)) for r in cur.fetchall()]
+    except Exception:
+        return []
 
 
 def add_database(name, url, token, note=""):
@@ -235,6 +241,15 @@ def _cache_set(conn, key, df):
         )
     except Exception:
         pass
+
+
+def safe_query(fn, *args, **kwargs):
+    """查询兜底：数据库不可用/配额受限/连接异常时返回 None 并提示，不让页面红屏"""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        st.error(f"数据库查询失败(可能是云端配额受限或连接异常): {e}")
+        return None
 
 
 def resolve_my_union(conn):
@@ -764,9 +779,11 @@ if page == "战报查询":
     if st.button("查询", type="primary"):
         if not name.strip():
             st.warning("请输入玩家名/地点关键词后再查询(避免全量扫描)")
-        else:
-            with st.spinner("查询中..."):
-                df = query_battle_reports(name, int(min_hp), db=_cur_db)
+            st.stop()
+        with st.spinner("查询中..."):
+            df = safe_query(query_battle_reports, name, int(min_hp), db=_cur_db)
+        if df is None:
+            st.stop()
         st.success(f"共 {len(df)} 条")
         df_disp = df.copy()
         df_disp["进攻阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"attack_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
@@ -795,9 +812,13 @@ elif page == "同盟成员常用队伍":
             st.session_state.pop("mt_show", None)
         else:
             with st.spinner("查询中..."):
-                df = query_member_teams(int(min_hp), name.strip(), db=_cur_db)
-            st.session_state["mt_df"] = df
-            st.session_state["mt_show"] = 20
+                df = safe_query(query_member_teams, int(min_hp), name.strip(), db=_cur_db)
+            if df is None:
+                st.session_state.pop("mt_df", None)
+                st.session_state.pop("mt_show", None)
+            else:
+                st.session_state["mt_df"] = df
+                st.session_state["mt_show"] = 20
     if "mt_df" in st.session_state and len(st.session_state["mt_df"]):
         df = st.session_state["mt_df"]
         st.success(f"共 {len(df)} 名成员")
@@ -831,9 +852,13 @@ elif page == "敌军队伍":
             st.session_state.pop("et_show", None)
         else:
             with st.spinner("查询中..."):
-                df = query_enemy_teams(int(min_hp), name.strip(), db=_cur_db)
-            st.session_state["et_df"] = df
-            st.session_state["et_show"] = 20
+                df = safe_query(query_enemy_teams, int(min_hp), name.strip(), db=_cur_db)
+            if df is None:
+                st.session_state.pop("et_df", None)
+                st.session_state.pop("et_show", None)
+            else:
+                st.session_state["et_df"] = df
+                st.session_state["et_show"] = 20
     if "et_df" in st.session_state and len(st.session_state["et_df"]):
         df = st.session_state["et_df"]
         st.success(f"共 {len(df)} 支队伍")
@@ -862,7 +887,9 @@ elif page == "成员活跃度":
         week_opt = st.radio("选择周", ["本周", "上周", "前两周"], key="act_week", horizontal=True)
         week_off = {"本周": 0, "上周": -1, "前两周": -2}[week_opt]
         with st.spinner("查询中..."):
-            df = query_weekly_activity(week_off, db=_cur_db)
+            df = safe_query(query_weekly_activity, week_off, db=_cur_db)
+        if df is None:
+            st.stop()
         if len(df):
             st.success(f"共 {len(df)} 名成员")
             disp = df.copy()
@@ -874,7 +901,9 @@ elif page == "成员活跃度":
             st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), f"weekly_activity_w{week_off}.csv")
     else:
         with st.spinner("查询中..."):
-            df = query_member_activity(db=_cur_db)
+            df = safe_query(query_member_activity, db=_cur_db)
+        if df is None:
+            st.stop()
         if len(df):
             st.success(f"共 {len(df)} 名成员")
             disp = df.copy()
