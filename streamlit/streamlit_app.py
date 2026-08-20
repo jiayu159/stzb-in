@@ -2,8 +2,9 @@ import sqlite3
 import os
 import json
 import re
+import time
 import urllib.request
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import streamlit as st
 import pandas as pd
@@ -341,7 +342,112 @@ def safe_query(fn, *args, **kwargs):
         return None
 
 
-@st.cache_data(ttl=10, show_spinner=False)
+def rate_limited(seconds=3):
+    """查询防抖：seconds 秒内只能触发一次(返回 False 表示被限流)"""
+    now = time.time()
+    last = st.session_state.get("_last_query", 0)
+    if now - last < seconds:
+        return False
+    st.session_state["_last_query"] = now
+    return True
+
+
+def resolve_my_union(conn):
+    row = conn.execute(
+        """SELECT attack_union_name FROM battle_report
+        WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
+        AND attack_union_name != '' AND attack_union_name != defend_union_name
+        GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1"""
+    ).fetchone()
+    return row[0] if row else ""
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def latest_data_time():
+    """最新战报时间(侧边栏展示)"""
+    conn = get_conn()
+    row = conn.execute("SELECT MAX(time) FROM battle_report").fetchone()
+    return row[0] if row else None
+
+
+def week_start(offset=0):
+    """指定周周一 0 点时间戳(本地时区)，offset: 0=本周, -1=上周"""
+    today = datetime.now().date()
+    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=int(offset))
+    return int(datetime(monday.year, monday.month, monday.day).timestamp())
+
+
+@st.cache_data(ttl=600, show_spinner=False)
+def query_weekly_activity(week_offset=0, player_kw="", union_kw=""):
+    """每周活跃度：指定周的参战/翻地/周贡献，可按人名/同盟名关键词过滤"""
+    conn = get_conn()
+    start, end = week_start(week_offset), week_start(week_offset) + 7 * 86400
+    my_union = resolve_my_union(conn)
+    p_cond = "AND t.name LIKE ?" if player_kw else ""
+    u_cond = ("AND EXISTS (SELECT 1 FROM battle_report b2 WHERE "
+              "(b2.attack_name = t.name AND b2.attack_union_name LIKE ?) "
+              "OR (b2.defend_name = t.name AND b2.defend_union_name LIKE ?))") if union_kw else ""
+    params = [start, end, start, end, start, end, my_union, start, end, start, end]
+    if player_kw:
+        params += [f"%{player_kw}%"]
+    if union_kw:
+        params += [f"%{union_kw}%"] * 2
+    sql = f"""
+    SELECT t.name, t.`group`, t.contribute_week,
+           (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name AND b.time >= ? AND b.time < ?) +
+           (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name AND r.time >= ? AND r.time < ?) AS atk_count,
+           (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name AND b.time >= ? AND b.time < ?) AS def_count,
+           (SELECT COUNT(*) FROM battle_report b
+            WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
+                    AND b.battle_desc NOT LIKE '%沃土%')
+                   OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
+              AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
+              AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)
+              AND b.time >= ? AND b.time < ?) AS land_count,
+           (SELECT MAX(time) FROM battle_report b
+            WHERE (b.attack_name = t.name OR b.defend_name = t.name) AND b.time >= ? AND b.time < ?) AS last_time
+    FROM team_user t WHERE t.name != ''
+          {p_cond}
+          {u_cond}
+    ORDER BY t.contribute_week DESC"""
+    return pd.read_sql_query(sql, conn, params=params)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def query_member_activity(player_kw="", union_kw=""):
+    """赛季活跃度 + 翻地次数，可按人名/同盟名关键词过滤"""
+    conn = get_conn()
+    my_union = resolve_my_union(conn)
+    p_cond = "AND t.name LIKE ?" if player_kw else ""
+    u_cond = ("AND EXISTS (SELECT 1 FROM battle_report b2 WHERE "
+              "(b2.attack_name = t.name AND b2.attack_union_name LIKE ?) "
+              "OR (b2.defend_name = t.name AND b2.defend_union_name LIKE ?))") if union_kw else ""
+    params = [my_union]
+    if player_kw:
+        params += [f"%{player_kw}%"]
+    if union_kw:
+        params += [f"%{union_kw}%"] * 2
+    sql = f"""
+    SELECT t.name, t.`group`, t.wu, t.power,
+           (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name) +
+           (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name) AS atk_count,
+           (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name) AS def_count,
+           (SELECT COUNT(*) FROM battle_report b
+            WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
+                    AND b.battle_desc NOT LIKE '%沃土%')
+                   OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
+              AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
+              AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)) AS land_count,
+           (SELECT MAX(MAX(b.time), (SELECT MAX(time) FROM reports r WHERE r.attack_name = t.name))
+            FROM battle_report b WHERE b.attack_name = t.name OR b.defend_name = t.name) AS last_time
+    FROM team_user t WHERE t.name != ''
+          {p_cond}
+          {u_cond}
+    ORDER BY t.wu DESC"""
+    return pd.read_sql_query(sql, conn, params=params)
+
+
+@st.cache_data(ttl=600, show_spinner=False)
 def query_teams(player_kw="", union_kw=""):
     """队伍查询：按人名关键字 + 同盟名关键字过滤(至少一个)，按(玩家,同盟,阵容)取最新队伍"""
     conn = get_conn()
@@ -400,38 +506,97 @@ def query_teams(player_kw="", union_kw=""):
 
 # ---------- 页面 ----------
 
-st.title("🗡️ 同盟队伍查询")
-player_kw = st.text_input("人名关键字(如: 张三 / 龍風)")
-union_kw = st.text_input("同盟名关键字(如: 龙 / 風雲)")
-if st.button("查询", type="primary"):
-    if not player_kw.strip() and not union_kw.strip():
-        st.warning("请输入人名关键字或同盟名关键字后再查询(避免全量扫描)")
-        st.session_state.pop("q_df", None)
-        st.session_state.pop("q_show", None)
-    else:
-        with st.spinner("查询中..."):
-            df = safe_query(query_teams, player_kw.strip(), union_kw.strip())
-        st.session_state["q_df"] = df
-        st.session_state["q_show"] = 20
+st.sidebar.title("🗡️ 同盟数据查询")
+with st.sidebar.container():
+    _latest = safe_query(latest_data_time)
+    st.sidebar.caption(f"📅 最新数据: {format_ts(_latest) if _latest is not None else '未知'}")
+page = st.sidebar.radio("功能", ["队伍查询", "成员活跃度"])
 
-if "q_df" in st.session_state and st.session_state["q_df"] is not None and len(st.session_state["q_df"]):
-    df = st.session_state["q_df"]
-    st.success(f"共 {len(df)} 支队伍")
-    show = st.session_state.get("q_show", 20)
-    for _, row in df.head(show).iterrows():
-        header = (f"**{row['player_name']}** · {row['union_name']} · 红度 {row['total_star']} · "
-                  f"兵力 {row['hp']} · 使用 {row['team_count']} 次 · 最近 {format_ts(row['last_time'])}")
-        st.markdown(header)
-        st.markdown(team_card_html(row), unsafe_allow_html=True)
-    if show < len(df):
-        if st.button(f"显示更多(剩余 {len(df) - show})"):
-            st.session_state["q_show"] = show + 50
-    csv = df.copy()
-    csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
-    csv["战法"] = csv.apply(lambda r: " | ".join(
-        " / ".join(f"{s.get('name','')}Lv{s.get('lv','')}" for s in hero)
-        for hero in parse_skills(r["all_skill_info"], r["role"])), axis=1)
-    csv["宝物"] = csv.apply(lambda r: " | ".join(
-        g["name"] + (f"[{g['entry']}]" if g.get("entry") else "") + f"Lv{g.get('lv','')}"
-        for g in parse_gears(r["gear_info"], r["role"])), axis=1)
-    st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "teams.csv")
+def kw_inputs(page_key):
+    p = st.text_input("人名关键字", key=f"pkw_{page_key}")
+    u = st.text_input("同盟名关键字", key=f"ukw_{page_key}")
+    return p, u
+
+
+def do_query(fn, *args, **kwargs):
+    """统一查询入口：3 秒防抖 + 空关键词拦截 + 结果入 session 缓存"""
+    if not rate_limited(3):
+        st.info("查询过于频繁，请 3 秒后再试(结果已缓存，重复查询不消耗配额)")
+        return None
+    with st.spinner("查询中..."):
+        return safe_query(fn, *args, **kwargs)
+
+
+if page == "队伍查询":
+    st.title("🗡️ 同盟队伍查询")
+    player_kw, union_kw = kw_inputs("t")
+    if st.button("查询", type="primary"):
+        if not player_kw.strip() and not union_kw.strip():
+            st.warning("请输入人名关键字或同盟名关键字后再查询(避免全量扫描)")
+            st.session_state.pop("q_df", None)
+            st.session_state.pop("q_show", None)
+        else:
+            df = do_query(query_teams, player_kw.strip(), union_kw.strip())
+            if df is not None:
+                st.session_state["q_df"] = df
+                st.session_state["q_show"] = 20
+
+    if "q_df" in st.session_state and st.session_state["q_df"] is not None and len(st.session_state["q_df"]):
+        df = st.session_state["q_df"]
+        st.success(f"共 {len(df)} 支队伍")
+        show = st.session_state.get("q_show", 20)
+        for _, row in df.head(show).iterrows():
+            header = (f"**{row['player_name']}** · {row['union_name']} · 红度 {row['total_star']} · "
+                      f"兵力 {row['hp']} · 使用 {row['team_count']} 次 · 最近 {format_ts(row['last_time'])}")
+            st.markdown(header)
+            st.markdown(team_card_html(row), unsafe_allow_html=True)
+        if show < len(df):
+            if st.button(f"显示更多(剩余 {len(df) - show})"):
+                st.session_state["q_show"] = show + 50
+        csv = df.copy()
+        csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
+        csv["战法"] = csv.apply(lambda r: " | ".join(
+            " / ".join(f"{s.get('name','')}Lv{s.get('lv','')}" for s in hero)
+            for hero in parse_skills(r["all_skill_info"], r["role"])), axis=1)
+        csv["宝物"] = csv.apply(lambda r: " | ".join(
+            g["name"] + (f"[{g['entry']}]" if g.get("entry") else "") + f"Lv{g.get('lv','')}"
+            for g in parse_gears(r["gear_info"], r["role"])), axis=1)
+        st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "teams.csv")
+
+elif page == "成员活跃度":
+    st.title("🗡️ 成员活跃度")
+    mode = st.radio("面板", ["每周活跃度", "赛季总活跃度"], key="act_mode", horizontal=True)
+    if mode == "每周活跃度":
+        week_opt = st.radio("选择周", ["本周", "上周", "前两周"], key="act_week", horizontal=True)
+        week_off = {"本周": 0, "上周": -1, "前两周": -2}[week_opt]
+    player_kw, union_kw = kw_inputs("a")
+    if st.button("查询", type="primary"):
+        if not player_kw.strip() and not union_kw.strip():
+            st.warning("请输入人名关键字或同盟名关键字后再查询(避免全量扫描)")
+            st.session_state.pop("act_df", None)
+        else:
+            if mode == "每周活跃度":
+                df = do_query(query_weekly_activity, week_off, player_kw.strip(), union_kw.strip())
+            else:
+                df = do_query(query_member_activity, player_kw.strip(), union_kw.strip())
+            if df is not None:
+                st.session_state["act_df"] = df
+                st.session_state["act_mode_cur"] = mode
+
+    if "act_df" in st.session_state and st.session_state["act_df"] is not None and len(st.session_state["act_df"]):
+        df = st.session_state["act_df"]
+        st.success(f"共 {len(df)} 名成员")
+        disp = df.copy()
+        disp["最近参战"] = disp["last_time"].apply(format_ts)
+        if st.session_state.get("act_mode_cur") == "每周活跃度":
+            st.dataframe(disp[["name", "group", "contribute_week", "atk_count", "def_count", "land_count", "最近参战"]].rename(
+                columns={"name": "成员", "group": "分组", "contribute_week": "周贡献",
+                         "atk_count": "进攻场次", "def_count": "防守场次", "land_count": "翻地次数"}),
+                use_container_width=True, hide_index=True)
+            st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "weekly_activity.csv")
+        else:
+            st.dataframe(disp[["name", "group", "wu", "power", "atk_count", "def_count", "land_count", "最近参战"]].rename(
+                columns={"name": "成员", "group": "分组", "wu": "武勋", "power": "势力",
+                         "atk_count": "进攻场次", "def_count": "防守场次", "land_count": "翻地次数"}),
+                use_container_width=True, hide_index=True)
+            st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "season_activity.csv")
