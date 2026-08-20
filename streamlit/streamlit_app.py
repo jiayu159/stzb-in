@@ -109,12 +109,7 @@ class TursoConnection:
 
 
 def get_conn(db_key=None):
-    # 优先按 db_key/侧边栏选中的数据库(总表 app_databases)连接，否则 secrets 直连，最后本地文件兜底
-    db_key = db_key or st.session_state.get("db_key", "")
-    if db_key:
-        for d in load_databases():
-            if d["name"] == db_key and d.get("url") and d.get("token"):
-                return TursoConnection(d["url"], d["token"])
+    # 总库始终为 secrets 直连(或本地文件兜底)；db_key 仅用于子表分流，不影响连接
     turso_url = st.secrets.get("TURSO_URL", "")
     turso_token = st.secrets.get("TURSO_TOKEN", "")
     if turso_url and turso_token:
@@ -122,6 +117,25 @@ def get_conn(db_key=None):
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def sub_suffix(db_key=None):
+    """子表名 → 表名后缀：321/默认库/空 = 无后缀(当前表)，其他 = _名字"""
+    db_key = db_key or st.session_state.get("db_key", "")
+    if db_key in ("", "321", "默认库"):
+        return ""
+    return "_" + db_key
+
+
+def _render(sql, db_key=None):
+    """按子表名替换 SQL 中的基表名(battle_report/team_user/reports/app_cache)"""
+    s = sub_suffix(db_key)
+    if not s:
+        return sql
+    return (sql.replace("battle_report", "battle_report" + s)
+            .replace("team_user", "team_user" + s)
+            .replace("reports", "reports" + s)
+            .replace("app_cache", "app_cache" + s))
 
 
 # ---------- 多数据库总表 ----------
@@ -134,7 +148,7 @@ def admin_conn():
 
 
 def ensure_app_databases():
-    """在管理库创建总表 app_databases，若为空则自动注册默认库(secrets 自身)"""
+    """在管理库创建总表 app_databases，若为空则自动注册子表 321(当前使用，无后缀表)"""
     conn = admin_conn()
     if conn is None:
         return
@@ -142,17 +156,18 @@ def ensure_app_databases():
         """CREATE TABLE IF NOT EXISTS app_databases (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT UNIQUE NOT NULL,
-            url TEXT NOT NULL,
-            token TEXT NOT NULL,
+            url TEXT DEFAULT '',
+            token TEXT DEFAULT '',
             note TEXT DEFAULT '',
             enabled INTEGER DEFAULT 1
         )"""
     )
-    n = conn.execute("SELECT COUNT(*) FROM app_databases").fetchone()[0]
+    n = conn.execute("SELECT COUNT(*) FROM app_databases WHERE name = '321'").fetchone()[0]
     if n == 0:
+        conn.execute("UPDATE app_databases SET enabled = 0 WHERE name = '默认库'")
         conn.execute(
-            "INSERT INTO app_databases (name, url, token, note) VALUES (?, ?, ?, ?)",
-            ["默认库", st.secrets.get("TURSO_URL", ""), st.secrets.get("TURSO_TOKEN", ""), "Secrets 直连库"],
+            "INSERT INTO app_databases (name, note) VALUES (?, ?)",
+            ["321", "当前使用子表(无后缀表)"],
         )
 
 
@@ -176,14 +191,14 @@ def load_databases():
         return []
 
 
-def add_database(name, url, token, note=""):
+def add_database(name, note=""):
     conn = admin_conn()
     if conn is None:
         return "未配置管理库(TURSO_URL/TURSO_TOKEN)"
     try:
         conn.execute(
-            "INSERT INTO app_databases (name, url, token, note) VALUES (?, ?, ?, ?)",
-            [name.strip(), url.strip(), token.strip(), note.strip()],
+            "INSERT INTO app_databases (name, note) VALUES (?, ?)",
+            [name.strip(), note.strip()],
         )
         load_databases.clear()
         return "ok"
@@ -202,20 +217,23 @@ def delete_database(name):
 
 # ---------- 物化缓存(活跃度等重聚合结果落库，避免全表重扫) ----------
 
-def _ensure_cache_table(conn):
+def _ensure_cache_table(conn, db_key=None):
     try:
         conn.execute(
-            "CREATE TABLE IF NOT EXISTS app_cache (cache_key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+            "CREATE TABLE IF NOT EXISTS " + _render("app_cache", db_key) +
+            " (cache_key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)"
         )
     except Exception:
         pass
 
 
-def _cache_get(conn, key, ttl):
+def _cache_get(conn, key, ttl, db_key=None):
     """读物化缓存，命中(未过期)返回 DataFrame，否则 None"""
-    _ensure_cache_table(conn)
+    _ensure_cache_table(conn, db_key)
     try:
-        cur = conn.execute("SELECT data, updated_at FROM app_cache WHERE cache_key = ?", [key])
+        cur = conn.execute(
+            "SELECT data, updated_at FROM " + _render("app_cache", db_key) + " WHERE cache_key = ?", [key]
+        )
         row = cur.fetchone()
     except Exception:
         return None
@@ -231,11 +249,12 @@ def _cache_get(conn, key, ttl):
     return None
 
 
-def _cache_set(conn, key, df):
+def _cache_set(conn, key, df, db_key=None):
     """把聚合结果写入物化缓存(写一次小数据，换取下次免全表扫描)"""
     try:
         conn.execute(
-            "INSERT INTO app_cache (cache_key, data, updated_at) VALUES (?, ?, ?) "
+            "INSERT INTO " + _render("app_cache", db_key) +
+            " (cache_key, data, updated_at) VALUES (?, ?, ?) "
             "ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
             [key, json.dumps(df.to_dict("records"), ensure_ascii=False), int(time.time())],
         )
@@ -252,12 +271,12 @@ def safe_query(fn, *args, **kwargs):
         return None
 
 
-def resolve_my_union(conn):
+def resolve_my_union(conn, db_key=None):
     row = conn.execute(
-        """SELECT attack_union_name FROM battle_report
+        _render("""SELECT attack_union_name FROM battle_report
         WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
         AND attack_union_name != '' AND attack_union_name != defend_union_name
-        GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1"""
+        GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1""", db_key)
     ).fetchone()
     return row[0] if row else ""
 
@@ -522,6 +541,7 @@ def query_member_teams(min_hp=0, name="", db=None):
            (SELECT COUNT(*) FROM member_rows m2
             WHERE m2.player_name = l.player_name AND m2.h1 = l.h1 AND m2.h2 = l.h2 AND m2.h3 = l.h3) AS team_count
     FROM latest l WHERE l.rn = 1 ORDER BY {order_by}"""
+    sql = _render(sql, db)
     return pd.read_sql_query(sql, conn, params=params)
 
 
@@ -529,7 +549,7 @@ def query_member_teams(min_hp=0, name="", db=None):
 def query_enemy_teams(min_hp=0, name="", db=None):
     """交战过的非己方同盟人员队伍(含胜负、过滤无归属)，按交战次数递减"""
     conn = get_conn(db)
-    my_union = resolve_my_union(conn)
+    my_union = resolve_my_union(conn, db)
     name_cond = "AND defend_name LIKE ?" if name else ""
     name_cond2 = "AND attack_name LIKE ?" if name else ""
     params = [my_union]
@@ -580,6 +600,7 @@ def query_enemy_teams(min_hp=0, name="", db=None):
             WHERE e2.player_name = l.player_name AND e2.h1 = l.h1 AND e2.h2 = l.h2 AND e2.h3 = l.h3) AS encounter_count
     FROM latest l WHERE l.rn = 1
     ORDER BY {order_by}"""
+    sql = _render(sql, db)
     return pd.read_sql_query(sql, conn, params=params)
 
 
@@ -594,11 +615,11 @@ def week_start(offset=0):
 def query_weekly_activity(week_offset=0, db=None):
     """每周活跃度: 指定周(周一0点起7天)的参战/翻地/周贡献(物化缓存 10 分钟)"""
     conn = get_conn(db)
-    cached = _cache_get(conn, f"weekly_{week_offset}", 600)
+    cached = _cache_get(conn, f"weekly_{week_offset}", 600, db)
     if cached is not None:
         return cached
     start, end = week_start(week_offset), week_start(week_offset) + 7 * 86400
-    my_union = resolve_my_union(conn)
+    my_union = resolve_my_union(conn, db)
     sql = """
     SELECT t.name, t.`group`, t.contribute_week,
            (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name AND b.time >= ? AND b.time < ?) +
@@ -616,8 +637,9 @@ def query_weekly_activity(week_offset=0, db=None):
     FROM team_user t WHERE t.name != ''
     ORDER BY t.contribute_week DESC"""
     params = [start, end, start, end, start, end, my_union, start, end, start, end]
+    sql = _render(sql, db)
     df = pd.read_sql_query(sql, conn, params=params)
-    _cache_set(conn, f"weekly_{week_offset}", df)
+    _cache_set(conn, f"weekly_{week_offset}", df, db)
     return df
 
 
@@ -625,10 +647,10 @@ def query_weekly_activity(week_offset=0, db=None):
 def query_member_activity(db=None):
     """成员活跃度 + 翻地次数(物化缓存 1 小时)"""
     conn = get_conn(db)
-    cached = _cache_get(conn, "season_activity", 3600)
+    cached = _cache_get(conn, "season_activity", 3600, db)
     if cached is not None:
         return cached
-    my_union = resolve_my_union(conn)
+    my_union = resolve_my_union(conn, db)
     sql = """
     SELECT t.name, t.`group`, t.wu, t.power,
            (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name) +
@@ -644,8 +666,9 @@ def query_member_activity(db=None):
             FROM battle_report b WHERE b.attack_name = t.name OR b.defend_name = t.name) AS last_time
     FROM team_user t WHERE t.name != ''
     ORDER BY t.wu DESC"""
+    sql = _render(sql, db)
     df = pd.read_sql_query(sql, conn, params=(my_union,))
-    _cache_set(conn, "season_activity", df)
+    _cache_set(conn, "season_activity", df, db)
     return df
 
 
@@ -665,6 +688,7 @@ def query_battle_reports(name="", min_hp=0, limit=500, db=None):
                      defend_hero1_id, defend_hero2_id, defend_hero3_id
               FROM battle_report WHERE 1=1{where}
               ORDER BY time DESC LIMIT ?"""
+    sql = _render(sql, db)
     return pd.read_sql_query(sql, conn, params=params + [limit])
 
 
@@ -707,6 +731,7 @@ def ai_chat(message, db=None):
     # 阶段2：本地执行
     try:
         conn = get_conn(db)
+        sql = _render(sql, db)
         df = pd.read_sql_query(sql, conn)
     except Exception as e:
         return "查询执行失败: " + str(e)
@@ -742,22 +767,20 @@ if not _db_names:
     st.error("没有可用的数据库，请先到侧边栏「数据库管理」添加。")
     with st.sidebar.expander("数据库管理"):
         with st.form("add_db_form", clear_on_submit=True):
-            _n = st.text_input("名称", key="adn")
-            _u = st.text_input("URL(https://xxx.turso.io)", key="adu")
-            _t = st.text_input("Token", type="password", key="adt")
+            _n = st.text_input("子表名", key="adn")
             _note = st.text_input("备注", key="adno")
             if st.form_submit_button("添加数据库"):
-                if _n and _u and _t:
-                    st.sidebar.write(add_database(_n, _u, _t, _note))
+                if _n.strip():
+                    st.sidebar.write(add_database(_n, _note))
                 else:
-                    st.sidebar.write("名称/URL/Token 不能为空")
+                    st.sidebar.write("子表名不能为空")
     st.stop()
 
 if not st.session_state.get("db_confirmed", False):
     st.title("🗡️ 同盟数据查询")
-    st.subheader("选择要查询的数据库")
+    st.subheader("选择要查询的子表")
     _idx = _db_names.index(_cur_db) if _cur_db in _db_names else 0
-    _sel = st.selectbox("数据库(按子表名字选择)", _db_names, index=_idx)
+    _sel = st.selectbox("子表名", _db_names, index=_idx)
     if st.button("进入查询界面", type="primary"):
         if _sel != _cur_db:
             st.cache_data.clear()
@@ -775,17 +798,15 @@ if st.sidebar.button("切换数据库"):
 
 with st.sidebar.expander("数据库管理"):
     with st.form("add_db_form", clear_on_submit=True):
-        _n = st.text_input("名称", key="adn")
-        _u = st.text_input("URL(https://xxx.turso.io)", key="adu")
-        _t = st.text_input("Token", type="password", key="adt")
+        _n = st.text_input("子表名", key="adn")
         _note = st.text_input("备注", key="adno")
         if st.form_submit_button("添加数据库"):
-            if _n and _u and _t:
-                st.sidebar.write(add_database(_n, _u, _t, _note))
+            if _n.strip():
+                st.sidebar.write(add_database(_n, _note))
             else:
-                st.sidebar.write("名称/URL/Token 不能为空")
+                st.sidebar.write("子表名不能为空")
     if _db_names:
-        _del = st.sidebar.selectbox("删除(禁用)数据库", _db_names, key="db_del")
+        _del = st.sidebar.selectbox("删除(禁用)子表", _db_names, key="db_del")
         if st.sidebar.button("删除选中"):
             st.sidebar.write(delete_database(_del))
 
