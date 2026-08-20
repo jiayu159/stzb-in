@@ -338,7 +338,7 @@ def safe_query(fn, *args, **kwargs):
     try:
         return fn(*args, **kwargs)
     except Exception as e:
-        st.error(f"数据库查询失败(可能是云端配额受限或连接异常): {e}")
+        st.error(f"数据库查询失败(云端配额受限或连接异常): {e}")
         return None
 
 
