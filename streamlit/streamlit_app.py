@@ -708,8 +708,11 @@ if page == "战报查询":
     name = st.text_input("玩家名/地点关键词")
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000)
     if st.button("查询", type="primary"):
-        with st.spinner("查询中..."):
-            df = query_battle_reports(name, int(min_hp), db=_cur_db)
+        if not name.strip():
+            st.warning("请输入玩家名/地点关键词后再查询(避免全量扫描)")
+        else:
+            with st.spinner("查询中..."):
+                df = query_battle_reports(name, int(min_hp), db=_cur_db)
         st.success(f"共 {len(df)} 条")
         df_disp = df.copy()
         df_disp["进攻阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"attack_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
@@ -732,10 +735,15 @@ elif page == "同盟成员常用队伍":
     name = st.text_input("成员名关键词", key="mn")
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="m")
     if st.button("查询", type="primary"):
-        with st.spinner("查询中..."):
-            df = query_member_teams(int(min_hp), name.strip(), db=_cur_db)
-        st.session_state["mt_df"] = df
-        st.session_state["mt_show"] = 20
+        if not name.strip():
+            st.warning("请输入成员名关键词后再查询(避免全量扫描)")
+            st.session_state.pop("mt_df", None)
+            st.session_state.pop("mt_show", None)
+        else:
+            with st.spinner("查询中..."):
+                df = query_member_teams(int(min_hp), name.strip(), db=_cur_db)
+            st.session_state["mt_df"] = df
+            st.session_state["mt_show"] = 20
     if "mt_df" in st.session_state and len(st.session_state["mt_df"]):
         df = st.session_state["mt_df"]
         st.success(f"共 {len(df)} 名成员")
@@ -763,10 +771,15 @@ elif page == "敌军队伍":
     name = st.text_input("玩家名关键词", key="en")
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="e")
     if st.button("查询", type="primary"):
-        with st.spinner("查询中..."):
-            df = query_enemy_teams(int(min_hp), name.strip(), db=_cur_db)
-        st.session_state["et_df"] = df
-        st.session_state["et_show"] = 20
+        if not name.strip():
+            st.warning("请输入玩家名关键词后再查询(避免全量扫描)")
+            st.session_state.pop("et_df", None)
+            st.session_state.pop("et_show", None)
+        else:
+            with st.spinner("查询中..."):
+                df = query_enemy_teams(int(min_hp), name.strip(), db=_cur_db)
+            st.session_state["et_df"] = df
+            st.session_state["et_show"] = 20
     if "et_df" in st.session_state and len(st.session_state["et_df"]):
         df = st.session_state["et_df"]
         st.success(f"共 {len(df)} 支队伍")
