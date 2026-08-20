@@ -2,6 +2,7 @@ import sqlite3
 import os
 import json
 import re
+import time
 import urllib.request
 from datetime import datetime, timedelta
 
@@ -191,6 +192,49 @@ def delete_database(name):
     conn.execute("UPDATE app_databases SET enabled = 0 WHERE name = ?", [name])
     load_databases.clear()
     return "ok"
+
+
+# ---------- 物化缓存(活跃度等重聚合结果落库，避免全表重扫) ----------
+
+def _ensure_cache_table(conn):
+    try:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS app_cache (cache_key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)"
+        )
+    except Exception:
+        pass
+
+
+def _cache_get(conn, key, ttl):
+    """读物化缓存，命中(未过期)返回 DataFrame，否则 None"""
+    _ensure_cache_table(conn)
+    try:
+        cur = conn.execute("SELECT data, updated_at FROM app_cache WHERE cache_key = ?", [key])
+        row = cur.fetchone()
+    except Exception:
+        return None
+    if not row:
+        return None
+    try:
+        data = json.loads(row[0])
+        age = int(time.time()) - int(row[1])
+    except Exception:
+        return None
+    if age >= 0 and age < ttl:
+        return pd.DataFrame(data) if data else pd.DataFrame()
+    return None
+
+
+def _cache_set(conn, key, df):
+    """把聚合结果写入物化缓存(写一次小数据，换取下次免全表扫描)"""
+    try:
+        conn.execute(
+            "INSERT INTO app_cache (cache_key, data, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
+            [key, json.dumps(df.to_dict("records"), ensure_ascii=False), int(time.time())],
+        )
+    except Exception:
+        pass
 
 
 def resolve_my_union(conn):
@@ -531,10 +575,13 @@ def week_start(offset=0):
     return int(datetime(monday.year, monday.month, monday.day).timestamp())
 
 
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(ttl=600, show_spinner=False)
 def query_weekly_activity(week_offset=0, db=None):
-    """每周活跃度: 指定周(周一0点起7天)的参战/翻地/周贡献"""
+    """每周活跃度: 指定周(周一0点起7天)的参战/翻地/周贡献(物化缓存 10 分钟)"""
     conn = get_conn(db)
+    cached = _cache_get(conn, f"weekly_{week_offset}", 600)
+    if cached is not None:
+        return cached
     start, end = week_start(week_offset), week_start(week_offset) + 7 * 86400
     my_union = resolve_my_union(conn)
     sql = """
@@ -554,13 +601,18 @@ def query_weekly_activity(week_offset=0, db=None):
     FROM team_user t WHERE t.name != ''
     ORDER BY t.contribute_week DESC"""
     params = [start, end, start, end, start, end, my_union, start, end, start, end]
-    return pd.read_sql_query(sql, conn, params=params)
+    df = pd.read_sql_query(sql, conn, params=params)
+    _cache_set(conn, f"weekly_{week_offset}", df)
+    return df
 
 
-@st.cache_data(ttl=10, show_spinner=False)
+@st.cache_data(ttl=3600, show_spinner=False)
 def query_member_activity(db=None):
-    """成员活跃度 + 翻地次数"""
+    """成员活跃度 + 翻地次数(物化缓存 1 小时)"""
     conn = get_conn(db)
+    cached = _cache_get(conn, "season_activity", 3600)
+    if cached is not None:
+        return cached
     my_union = resolve_my_union(conn)
     sql = """
     SELECT t.name, t.`group`, t.wu, t.power,
@@ -577,7 +629,9 @@ def query_member_activity(db=None):
             FROM battle_report b WHERE b.attack_name = t.name OR b.defend_name = t.name) AS last_time
     FROM team_user t WHERE t.name != ''
     ORDER BY t.wu DESC"""
-    return pd.read_sql_query(sql, conn, params=(my_union,))
+    df = pd.read_sql_query(sql, conn, params=(my_union,))
+    _cache_set(conn, "season_activity", df)
+    return df
 
 
 @st.cache_data(ttl=10, show_spinner=False)
