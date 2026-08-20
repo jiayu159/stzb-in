@@ -90,21 +90,12 @@ func initSync() {
 	syncCfg = cfg
 	// Hrana over HTTP 需要 https 端点，libsql:// 前缀自动转换
 	syncCfg.URL = strings.Replace(syncCfg.URL, "libsql://", "https://", 1)
-	// 数据库绑定校验: 配置了 allowedDb 且当前库名不匹配时禁止同步
-	// (防止把程序发给别人后，其数据误入本库)
-	if syncCfg.AllowedDb != "" {
-		cur := strings.TrimSuffix(global.CurrentDbName, ".db")
-		if cur == "" {
-			// 数据库还没打开，属于临时状态: 由 StartSyncLoop 循环重试 initSync
-			syncWaitingDB = true
-			log.Println("同步器: 数据库未打开，云同步等待")
-			return
-		}
-		if !strings.Contains(cur, syncCfg.AllowedDb) {
-			log.Printf("同步器: 当前数据库 %q 与配置允许的 %q 不匹配，云同步已禁用", cur, syncCfg.AllowedDb)
-			syncWaitingDB = false
-			return
-		}
+	// 数据库绑定校验已解除: 不再校验库名，允许任意本地库同步到云端
+	if global.CurrentDbName == "" {
+		// 数据库还没打开，属于临时状态: 由 StartSyncLoop 循环重试 initSync
+		syncWaitingDB = true
+		log.Println("同步器: 数据库未打开，云同步等待")
+		return
 	}
 	syncWaitingDB = false
 	syncEnabled = true
