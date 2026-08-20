@@ -2,15 +2,13 @@ import sqlite3
 import os
 import json
 import re
-import time
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime
 
 import streamlit as st
 import pandas as pd
-from openai import OpenAI
 
-st.set_page_config(page_title="同盟数据查询", page_icon="🗡️", layout="wide")
+st.set_page_config(page_title="同盟队伍查询", page_icon="🗡️", layout="wide")
 
 DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "data.db"))
 
@@ -108,8 +106,8 @@ class TursoConnection:
         pass
 
 
-def get_conn(db_key=None):
-    # 总库始终为 secrets 直连(或本地文件兜底)；db_key 仅用于子表分流，不影响连接
+def get_conn():
+    """云端 secrets 直连，本地 data.db 兜底"""
     turso_url = st.secrets.get("TURSO_URL", "")
     turso_token = st.secrets.get("TURSO_TOKEN", "")
     if turso_url and turso_token:
@@ -119,173 +117,12 @@ def get_conn(db_key=None):
     return conn
 
 
-def sub_suffix(db_key=None):
-    """子表名 → 表名后缀：321/默认库/空 = 无后缀(当前表)，其他 = _名字"""
-    db_key = db_key or st.session_state.get("db_key", "")
-    if db_key in ("", "321", "默认库"):
-        return ""
-    return "_" + db_key
-
-
-def _render(sql, db_key=None):
-    """按子表名替换 SQL 中的基表名(battle_report/team_user/reports/app_cache)"""
-    s = sub_suffix(db_key)
-    if not s:
-        return sql
-    return (sql.replace("battle_report", "battle_report" + s)
-            .replace("team_user", "team_user" + s)
-            .replace("reports", "reports" + s)
-            .replace("app_cache", "app_cache" + s))
-
-
-# ---------- 多数据库总表 ----------
-
-def admin_conn():
-    """管理库连接(总表所在库)"""
-    url = st.secrets.get("TURSO_URL", "")
-    token = st.secrets.get("TURSO_TOKEN", "")
-    return TursoConnection(url, token) if (url and token) else None
-
-
-def ensure_app_databases():
-    """在管理库创建总表 app_databases，若为空则自动注册子表 321(当前使用，无后缀表)"""
-    conn = admin_conn()
-    if conn is None:
-        return
-    conn.execute(
-        """CREATE TABLE IF NOT EXISTS app_databases (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT UNIQUE NOT NULL,
-            url TEXT DEFAULT '',
-            token TEXT DEFAULT '',
-            note TEXT DEFAULT '',
-            enabled INTEGER DEFAULT 1
-        )"""
-    )
-    n = conn.execute("SELECT COUNT(*) FROM app_databases WHERE name = '321'").fetchone()[0]
-    if n == 0:
-        conn.execute("UPDATE app_databases SET enabled = 0 WHERE name = '默认库'")
-        conn.execute(
-            "INSERT INTO app_databases (name, note) VALUES (?, ?)",
-            ["321", "当前使用子表(无后缀表)"],
-        )
-
-
-@st.cache_data(ttl=30, show_spinner=False)
-def load_databases():
-    """读取总表全部启用数据库(供侧边栏选择与连接)"""
-    try:
-        conn = admin_conn()
-    except Exception:
-        return []
-    if conn is None:
-        return []
-    try:
-        ensure_app_databases()
-        cur = conn.execute(
-            "SELECT id, name, url, token, note, enabled FROM app_databases WHERE enabled = 1 ORDER BY id"
-        )
-        cols = [d[0] for d in cur.description]
-        return [dict(zip(cols, r)) for r in cur.fetchall()]
-    except Exception:
-        return []
-
-
-def add_database(name, note=""):
-    conn = admin_conn()
-    if conn is None:
-        return "未配置管理库(TURSO_URL/TURSO_TOKEN)"
-    try:
-        conn.execute(
-            "INSERT INTO app_databases (name, note) VALUES (?, ?)",
-            [name.strip(), note.strip()],
-        )
-        load_databases.clear()
-        return "ok"
-    except Exception as e:
-        return f"失败: {e}"
-
-
-def delete_database(name):
-    conn = admin_conn()
-    if conn is None:
-        return "未配置管理库"
-    conn.execute("UPDATE app_databases SET enabled = 0 WHERE name = ?", [name])
-    load_databases.clear()
-    return "ok"
-
-
-# ---------- 物化缓存(活跃度等重聚合结果落库，避免全表重扫) ----------
-
-def _ensure_cache_table(conn, db_key=None):
-    try:
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS " + _render("app_cache", db_key) +
-            " (cache_key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL)"
-        )
-    except Exception:
-        pass
-
-
-def _cache_get(conn, key, ttl, db_key=None):
-    """读物化缓存，命中(未过期)返回 DataFrame，否则 None"""
-    _ensure_cache_table(conn, db_key)
-    try:
-        cur = conn.execute(
-            "SELECT data, updated_at FROM " + _render("app_cache", db_key) + " WHERE cache_key = ?", [key]
-        )
-        row = cur.fetchone()
-    except Exception:
-        return None
-    if not row:
-        return None
-    try:
-        data = json.loads(row[0])
-        age = int(time.time()) - int(row[1])
-    except Exception:
-        return None
-    if age >= 0 and age < ttl:
-        return pd.DataFrame(data) if data else pd.DataFrame()
-    return None
-
-
-def _cache_set(conn, key, df, db_key=None):
-    """把聚合结果写入物化缓存(写一次小数据，换取下次免全表扫描)"""
-    try:
-        conn.execute(
-            "INSERT INTO " + _render("app_cache", db_key) +
-            " (cache_key, data, updated_at) VALUES (?, ?, ?) "
-            "ON CONFLICT(cache_key) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at",
-            [key, json.dumps(df.to_dict("records"), ensure_ascii=False), int(time.time())],
-        )
-    except Exception:
-        pass
-
-
-def safe_query(fn, *args, **kwargs):
-    """查询兜底：数据库不可用/配额受限/连接异常时返回 None 并提示，不让页面红屏"""
-    try:
-        return fn(*args, **kwargs)
-    except Exception as e:
-        st.error(f"数据库查询失败(可能是云端配额受限或连接异常): {e}")
-        return None
-
-
-def resolve_my_union(conn, db_key=None):
-    row = conn.execute(
-        _render("""SELECT attack_union_name FROM battle_report
-        WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
-        AND attack_union_name != '' AND attack_union_name != defend_union_name
-        GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1""", db_key)
-    ).fetchone()
-    return row[0] if row else ""
-
-
 # ---------- 数据配置(与桌面版 cfg.js 同步) ----------
 
 import os as _os
 
 _cfg_dir = _os.path.dirname(__file__)
+
 
 def _load_cfg(name):
     try:
@@ -293,6 +130,7 @@ def _load_cfg(name):
             return json.load(f)
     except Exception:
         return {}
+
 
 hero_cfg = _load_cfg("hero_cfg.json")
 skill_cfg = _load_cfg("skill_cfg.json")
@@ -493,494 +331,107 @@ def format_ts(ts):
         return ""
     return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
 
+
+def safe_query(fn, *args, **kwargs):
+    """查询兜底：数据库不可用/配额受限/连接异常时返回 None 并提示，不让页面红屏"""
+    try:
+        return fn(*args, **kwargs)
+    except Exception as e:
+        st.error(f"数据库查询失败(可能是云端配额受限或连接异常): {e}")
+        return None
+
+
 @st.cache_data(ttl=10, show_spinner=False)
-def query_member_teams(min_hp=0, name="", db=None):
-    """同盟成员常用队伍：默认每名成员最新一个队伍；搜索具体玩家时按阵容分组显示其全部队伍"""
-    conn = get_conn(db)
-    name_cond = "AND attack_name LIKE ?" if name else ""
-    name_cond2 = "AND defend_name LIKE ?" if name else ""
-    if name:
-        params = [f"%{name}%", min_hp, f"%{name}%", min_hp]
-    else:
-        params = [min_hp, min_hp]
-    part_by = "PARTITION BY player_name, h1, h2, h3" if name else "PARTITION BY player_name"
-    order_by = "team_count DESC, l.player_name" if name else "l.player_name"
+def query_teams(player_kw="", union_kw=""):
+    """队伍查询：按人名关键字 + 同盟名关键字过滤(至少一个)，按(玩家,同盟,阵容)取最新队伍"""
+    conn = get_conn()
+    p_cond_a = "AND attack_name LIKE ?" if player_kw else ""
+    p_cond_d = "AND defend_name LIKE ?" if player_kw else ""
+    u_cond_a = "AND attack_union_name LIKE ?" if union_kw else ""
+    u_cond_d = "AND defend_union_name LIKE ?" if union_kw else ""
+    params = [1000]  # 攻分支 attack_hp
+    if player_kw:
+        params += [f"%{player_kw}%"]  # 攻分支 attack_name
+    if union_kw:
+        params += [f"%{union_kw}%"]  # 攻分支 attack_union_name
+    params += [1000]  # 守分支 defend_hp
+    if player_kw:
+        params += [f"%{player_kw}%"]  # 守分支 defend_name
+    if union_kw:
+        params += [f"%{union_kw}%"]  # 守分支 defend_union_name
     sql = f"""
-    WITH member_rows AS (
-        SELECT attack_name AS player_name, attack_hero1_id AS h1, attack_hero2_id AS h2, attack_hero3_id AS h3,
+    WITH player_rows AS (
+        SELECT attack_name AS player_name, attack_union_name AS union_name,
+               attack_hero1_id AS h1, attack_hero2_id AS h2, attack_hero3_id AS h3,
                attack_hero1_level AS l1, attack_hero2_level AS l2, attack_hero3_level AS l3,
                attack_hero1_star AS s1, attack_hero2_star AS s2, attack_hero3_star AS s3,
                attack_total_star AS total_star, attack_hp AS hp, time, all_skill_info,
                attacker_gear_info AS gear_info, 'attack' AS role
         FROM battle_report
-        WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
-          {name_cond}
-          AND attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
+        WHERE attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
           AND attack_hero1_level >= 15 AND attack_hero2_level >= 15 AND attack_hero3_level >= 15
           AND attack_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
+          {p_cond_a} {u_cond_a}
         UNION ALL
-        SELECT defend_name, defend_hero1_id, defend_hero2_id, defend_hero3_id,
+        SELECT defend_name, defend_union_name,
+               defend_hero1_id, defend_hero2_id, defend_hero3_id,
                defend_hero1_level, defend_hero2_level, defend_hero3_level,
                defend_hero1_star, defend_hero2_star, defend_hero3_star,
                defend_total_star, defend_hp, time, all_skill_info,
                defender_gear_info, 'defend'
         FROM battle_report
-        WHERE defend_name IN (SELECT name FROM team_user WHERE name != '')
-          {name_cond2}
-          AND defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
+        WHERE defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
           AND defend_hero1_level >= 15 AND defend_hero2_level >= 15 AND defend_hero3_level >= 15
           AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
+          {p_cond_d} {u_cond_d}
     ),
     latest AS (
-        SELECT *, ROW_NUMBER() OVER ({part_by} ORDER BY time DESC) AS rn
-        FROM member_rows
+        SELECT *, ROW_NUMBER() OVER (PARTITION BY player_name, union_name, h1, h2, h3 ORDER BY time DESC) AS rn
+        FROM player_rows
     )
-    SELECT l.player_name, l.h1, l.h2, l.h3, l.l1, l.l2, l.l3, l.s1, l.s2, l.s3,
-           l.total_star, l.hp, l.time AS last_time,
-           l.all_skill_info, l.gear_info, l.role,
-           (SELECT COUNT(*) FROM member_rows m2
+    SELECT l.player_name, l.union_name, l.h1, l.h2, l.h3, l.l1, l.l2, l.l3, l.s1, l.s2, l.s3,
+           l.total_star, l.hp, l.time AS last_time, l.all_skill_info, l.gear_info, l.role,
+           (SELECT COUNT(*) FROM player_rows m2
             WHERE m2.player_name = l.player_name AND m2.h1 = l.h1 AND m2.h2 = l.h2 AND m2.h3 = l.h3) AS team_count
-    FROM latest l WHERE l.rn = 1 ORDER BY {order_by}"""
-    sql = _render(sql, db)
-    return pd.read_sql_query(sql, conn, params=params)
-
-
-@st.cache_data(ttl=10, show_spinner=False)
-def query_enemy_teams(min_hp=0, name="", db=None):
-    """交战过的非己方同盟人员队伍(含胜负、过滤无归属)，按交战次数递减"""
-    conn = get_conn(db)
-    my_union = resolve_my_union(conn, db)
-    name_cond = "AND defend_name LIKE ?" if name else ""
-    name_cond2 = "AND attack_name LIKE ?" if name else ""
-    params = [my_union]
-    if name:
-        params += [f"%{name}%"]
-    params += [min_hp, my_union]
-    if name:
-        params += [f"%{name}%"]
-    params += [min_hp]
-    part_by = "PARTITION BY player_name, h1, h2, h3" if name else "PARTITION BY player_name"
-    order_by = "l.player_name, encounter_count DESC" if name else "encounter_count DESC"
-    sql = f"""
-    WITH enemy_encounters AS (
-        SELECT defend_name AS player_name, defend_hero1_id AS h1, defend_hero2_id AS h2, defend_hero3_id AS h3,
-               defend_hero1_level AS l1, defend_hero2_level AS l2, defend_hero3_level AS l3,
-               defend_hero1_star AS s1, defend_hero2_star AS s2, defend_hero3_star AS s3,
-               defend_total_star AS total_star, defend_hp AS hp, time, all_skill_info,
-               defender_gear_info AS gear_info, 'defend' AS role
-        FROM battle_report
-        WHERE attack_union_name = ?
-          AND defend_name NOT IN (SELECT name FROM team_user WHERE name != '')
-          AND defend_union_name != ''
-          {name_cond}
-          AND defend_hero1_id != 0 AND defend_hero2_id != 0 AND defend_hero3_id != 0
-          AND defend_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
-        UNION ALL
-        SELECT attack_name, attack_hero1_id, attack_hero2_id, attack_hero3_id,
-               attack_hero1_level, attack_hero2_level, attack_hero3_level,
-               attack_hero1_star, attack_hero2_star, attack_hero3_star,
-               attack_total_star, attack_hp, time, all_skill_info,
-               attacker_gear_info, 'attack'
-        FROM battle_report
-        WHERE defend_union_name = ?
-          AND attack_name NOT IN (SELECT name FROM team_user WHERE name != '')
-          AND attack_union_name != ''
-          {name_cond2}
-          AND attack_hero1_id != 0 AND attack_hero2_id != 0 AND attack_hero3_id != 0
-          AND attack_hp >= ? AND npc = 0 AND all_skill_info IS NOT NULL AND all_skill_info != ''
-    ),
-    latest AS (
-        SELECT *, ROW_NUMBER() OVER ({part_by} ORDER BY time DESC) AS rn
-        FROM enemy_encounters
-    )
-    SELECT l.player_name, l.h1, l.h2, l.h3, l.l1, l.l2, l.l3, l.s1, l.s2, l.s3,
-           l.total_star, l.hp, l.time AS last_time,
-           l.all_skill_info, l.gear_info, l.role,
-           (SELECT COUNT(*) FROM enemy_encounters e2
-            WHERE e2.player_name = l.player_name AND e2.h1 = l.h1 AND e2.h2 = l.h2 AND e2.h3 = l.h3) AS encounter_count
     FROM latest l WHERE l.rn = 1
-    ORDER BY {order_by}"""
-    sql = _render(sql, db)
+    ORDER BY l.union_name, l.player_name"""
     return pd.read_sql_query(sql, conn, params=params)
-
-
-def week_start(offset=0):
-    """指定周周一 0 点时间戳(本地时区)，offset: 0=本周, -1=上周"""
-    today = datetime.now().date()
-    monday = today - timedelta(days=today.weekday()) + timedelta(weeks=int(offset))
-    return int(datetime(monday.year, monday.month, monday.day).timestamp())
-
-
-@st.cache_data(ttl=600, show_spinner=False)
-def query_weekly_activity(week_offset=0, db=None):
-    """每周活跃度: 指定周(周一0点起7天)的参战/翻地/周贡献(物化缓存 10 分钟)"""
-    conn = get_conn(db)
-    cached = _cache_get(conn, f"weekly_{week_offset}", 600, db)
-    if cached is not None:
-        return cached
-    start, end = week_start(week_offset), week_start(week_offset) + 7 * 86400
-    my_union = resolve_my_union(conn, db)
-    sql = """
-    SELECT t.name, t.`group`, t.contribute_week,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name AND b.time >= ? AND b.time < ?) +
-           (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name AND r.time >= ? AND r.time < ?) AS atk_count,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name AND b.time >= ? AND b.time < ?) AS def_count,
-           (SELECT COUNT(*) FROM battle_report b
-            WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
-                    AND b.battle_desc NOT LIKE '%沃土%')
-                   OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
-              AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
-              AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)
-              AND b.time >= ? AND b.time < ?) AS land_count,
-           (SELECT MAX(time) FROM battle_report b
-            WHERE (b.attack_name = t.name OR b.defend_name = t.name) AND b.time >= ? AND b.time < ?) AS last_time
-    FROM team_user t WHERE t.name != ''
-    ORDER BY t.contribute_week DESC"""
-    params = [start, end, start, end, start, end, my_union, start, end, start, end]
-    sql = _render(sql, db)
-    df = pd.read_sql_query(sql, conn, params=params)
-    _cache_set(conn, f"weekly_{week_offset}", df, db)
-    return df
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def query_member_activity(db=None):
-    """成员活跃度 + 翻地次数(物化缓存 1 小时)"""
-    conn = get_conn(db)
-    cached = _cache_get(conn, "season_activity", 3600, db)
-    if cached is not None:
-        return cached
-    my_union = resolve_my_union(conn, db)
-    sql = """
-    SELECT t.name, t.`group`, t.wu, t.power,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name) +
-           (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name) AS atk_count,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name) AS def_count,
-           (SELECT COUNT(*) FROM battle_report b
-            WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
-                    AND b.battle_desc NOT LIKE '%沃土%')
-                   OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
-              AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
-              AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)) AS land_count,
-           (SELECT MAX(MAX(b.time), (SELECT MAX(time) FROM reports r WHERE r.attack_name = t.name))
-            FROM battle_report b WHERE b.attack_name = t.name OR b.defend_name = t.name) AS last_time
-    FROM team_user t WHERE t.name != ''
-    ORDER BY t.wu DESC"""
-    sql = _render(sql, db)
-    df = pd.read_sql_query(sql, conn, params=(my_union,))
-    _cache_set(conn, "season_activity", df, db)
-    return df
-
-
-@st.cache_data(ttl=10, show_spinner=False)
-def query_battle_reports(name="", min_hp=0, limit=500, db=None):
-    conn = get_conn(db)
-    cond, params = [], []
-    if name:
-        cond.append("(attack_name LIKE ? OR defend_name LIKE ? OR wid_name LIKE ?)")
-        params += [f"%{name}%"] * 3
-    if min_hp:
-        cond.append("attack_hp >= ?")
-        params.append(min_hp)
-    where = " AND " + " AND ".join(cond) if cond else ""
-    sql = f"""SELECT time, wid_name, attack_name, attack_union_name, defend_name, defend_union_name,
-                     attack_hp, defend_hp, garrison, result, attack_hero1_id, attack_hero2_id, attack_hero3_id,
-                     defend_hero1_id, defend_hero2_id, defend_hero3_id
-              FROM battle_report WHERE 1=1{where}
-              ORDER BY time DESC LIMIT ?"""
-    sql = _render(sql, db)
-    return pd.read_sql_query(sql, conn, params=params + [limit])
-
-
-# ---------- AI 小秘书 ----------
-
-AI_SCHEMA = """数据库为 SQLite 只读库，共 3 张表：
-1. team_user 同盟成员: name, group(分组,查询需用反引号转义), contribute_total, contribute_week, pos, power(势力), wu(武勋), join_time
-2. battle_report 战报: time, wid_name(战斗地点), attack_name, attack_union_name, defend_name, defend_union_name,
-   npc, result(0=攻方败 1=攻方胜 2=平局), attack_hp, defend_hp,
-   attack_hero1_id/2/3_id(队伍武将ID), attack_hero*_level, attack_hero*_star, attack_total_star, all_skill_info(战法),
-   defend_hero1_id/2/3_id, defend_*_level, defend_*_star, defend_total_star, garrison(0=主力 1=拆迁), battle_desc(翻地描述)
-3. task 攻城任务: id, name, target_user_num, complete_user_num, status, target
-规则：可以自由用 SELECT/WHERE/LIKE/IN/GROUP BY/ORDER BY/LIMIT/CASE WHEN/聚合函数/strftime('%m-%d %H:%M', time, 'unixepoch', 'localtime')。
-角色名用 LIKE 模糊匹配；用户问队伍/阵容指 battle_report 中玩家的武将和战法，与 team_user.group 无关。
-只允许 SELECT 开头的只读查询。"""
-
-
-def ai_chat(message, db=None):
-    api_key = st.secrets.get("AI_API_KEY", "")
-    if not api_key:
-        return "未配置 AI_API_KEY（Streamlit 的 Secrets 中设置）"
-    client = OpenAI(
-        base_url=st.secrets.get("AI_BASE_URL", "https://ai.gitee.com/v1"),
-        api_key=api_key,
-    )
-    model = st.secrets.get("AI_MODEL", "Qwen3-8B")
-
-    # 阶段1：生成 SQL
-    plan = client.chat.completions.create(
-        model=model,
-        messages=[{"role": "user", "content": "你是查询规划器，根据用户问题写一条 SQLite SELECT 查询。只输出 {\"sql\": \"...\"}。\n\n" + AI_SCHEMA + "\n\n用户问题: " + message}],
-    ).choices[0].message.content
-    m = re.search(r'"sql"\s*:\s*"((?:[^"\\]|\\.)*)"', plan, re.S)
-    if not m:
-        return "AI 未产出有效 SQL: " + plan[:200]
-    sql = m.group(1).replace('\\"', '"').replace('\\\\', '\\')
-    if not sql.strip().upper().startswith("SELECT"):
-        return "AI 生成的不是查询语句，已拒绝"
-
-    # 阶段2：本地执行
-    try:
-        conn = get_conn(db)
-        sql = _render(sql, db)
-        df = pd.read_sql_query(sql, conn)
-    except Exception as e:
-        return "查询执行失败: " + str(e)
-    result_text = df.to_csv(sep="|", index=False) if len(df) else ""
-
-    # 阶段3：生成回答
-    if not result_text:
-        system = "你是「妲己小秘书」。本地查询无数据，请如实回答，不要编造。"
-    else:
-        system = ("你是「妲己小秘书」。程序已在本地数据库执行查询，以下是结果(TSV，首行为列名)。请用地道中文口语回答，"
-                  "引用具体数字，把列名翻译成中文(power=势力, wu=武勋, wid_name=地点, attack_name=进攻方, defend_name=防守方, "
-                  "attack_hp=兵力, garrison=0主力1拆迁, npc=1=与NPC战斗, result=0攻败1攻胜2平局)，绝不编造。\n\n查询结果:\n" + result_text)
-    reply = client.chat.completions.create(
-        model=model,
-        messages=[
-            {"role": "system", "content": system},
-            {"role": "user", "content": message},
-        ],
-    ).choices[0].message.content
-    return reply
 
 
 # ---------- 页面 ----------
 
-st.sidebar.title("🗡️ 同盟数据查询")
-
-# 数据库选择(总表 app_databases)：进入查询界面之前，先按子表名字选择要用的库
-_db_list = load_databases()
-_db_names = [d["name"] for d in _db_list]
-_cur_db = st.session_state.get("db_key", "")
-
-if not _db_names:
-    st.error("没有可用的数据库，请先到侧边栏「数据库管理」添加。")
-    with st.sidebar.expander("数据库管理"):
-        with st.form("add_db_form", clear_on_submit=True):
-            _n = st.text_input("子表名", key="adn")
-            _note = st.text_input("备注", key="adno")
-            if st.form_submit_button("添加数据库"):
-                if _n.strip():
-                    st.sidebar.write(add_database(_n, _note))
-                else:
-                    st.sidebar.write("子表名不能为空")
-    st.stop()
-
-if not st.session_state.get("db_confirmed", False):
-    st.title("🗡️ 同盟数据查询")
-    st.subheader("选择要查询的子表")
-    _idx = _db_names.index(_cur_db) if _cur_db in _db_names else 0
-    _sel = st.selectbox("子表名", _db_names, index=_idx)
-    if st.button("进入查询界面", type="primary"):
-        if _sel != _cur_db:
-            st.cache_data.clear()
-        st.session_state["db_key"] = _sel
-        st.session_state["db_confirmed"] = True
-        st.rerun()
-    st.stop()
-
-_cur_db = st.session_state["db_key"]
-st.sidebar.caption(f"当前数据库: {_cur_db}")
-if st.sidebar.button("切换数据库"):
-    st.cache_data.clear()
-    st.session_state["db_confirmed"] = False
-    st.rerun()
-
-with st.sidebar.expander("数据库管理"):
-    with st.form("add_db_form", clear_on_submit=True):
-        _n = st.text_input("子表名", key="adn")
-        _note = st.text_input("备注", key="adno")
-        if st.form_submit_button("添加数据库"):
-            if _n.strip():
-                st.sidebar.write(add_database(_n, _note))
-            else:
-                st.sidebar.write("子表名不能为空")
-    if _db_names:
-        _del = st.sidebar.selectbox("删除(禁用)子表", _db_names, key="db_del")
-        if st.sidebar.button("删除选中"):
-            st.sidebar.write(delete_database(_del))
-
-page = st.sidebar.radio("功能", ["战报查询", "同盟成员常用队伍", "敌军队伍", "成员活跃度", "AI 小秘书"])
-
-using_turso = bool(st.secrets.get("TURSO_URL", "") and st.secrets.get("TURSO_TOKEN", ""))
-if not using_turso and not os.path.exists(DB_PATH):
-    st.error(f"未找到数据库文件: {DB_PATH}。请把 .db 文件放到仓库根目录并命名为 data.db，"
-             f"或在 Secrets 中配置 TURSO_URL/TURSO_TOKEN 直连云端实时库。")
-    st.stop()
-
-if using_turso:
-    st.sidebar.caption("🌐 云端实时库(Turso)")
-
-if page == "战报查询":
-    st.header("战报查询")
-    name = st.text_input("玩家名/地点关键词")
-    min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000)
-    if st.button("查询", type="primary"):
-        if not name.strip():
-            st.warning("请输入玩家名/地点关键词后再查询(避免全量扫描)")
-            st.stop()
-        with st.spinner("查询中..."):
-            df = safe_query(query_battle_reports, name, int(min_hp), db=_cur_db)
-        if df is None:
-            st.stop()
-        st.success(f"共 {len(df)} 条")
-        df_disp = df.copy()
-        df_disp["进攻阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"attack_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
-        df_disp["防守阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"defend_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
-        df_disp["最近时间"] = df_disp["time"].apply(format_ts)
-        st.dataframe(df_disp[["最近时间", "wid_name", "attack_name", "attack_union_name", "defend_name",
-                              "defend_union_name", "attack_hp", "defend_hp", "garrison", "result",
-                              "进攻阵容", "防守阵容"]].rename(
-            columns={"wid_name": "地点", "attack_name": "进攻方", "attack_union_name": "进攻方同盟",
-                     "defend_name": "防守方", "defend_union_name": "防守方同盟", "attack_hp": "攻方兵力",
-                     "defend_hp": "守方兵力", "garrison": "类型", "result": "结果"}),
-            use_container_width=True, hide_index=True)
-        csv = df.copy()
-        csv["进攻阵容"] = df_disp["进攻阵容"]
-        csv["防守阵容"] = df_disp["防守阵容"]
-        st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "battle_reports.csv")
-
-elif page == "同盟成员常用队伍":
-    st.header("同盟成员常用队伍")
-    name = st.text_input("成员名关键词", key="mn")
-    min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="m")
-    if st.button("查询", type="primary"):
-        if not name.strip():
-            st.warning("请输入成员名关键词后再查询(避免全量扫描)")
-            st.session_state.pop("mt_df", None)
-            st.session_state.pop("mt_show", None)
-        else:
-            with st.spinner("查询中..."):
-                df = safe_query(query_member_teams, int(min_hp), name.strip(), db=_cur_db)
-            if df is None:
-                st.session_state.pop("mt_df", None)
-                st.session_state.pop("mt_show", None)
-            else:
-                st.session_state["mt_df"] = df
-                st.session_state["mt_show"] = 20
-    if "mt_df" in st.session_state and len(st.session_state["mt_df"]):
-        df = st.session_state["mt_df"]
-        st.success(f"共 {len(df)} 名成员")
-        show = st.session_state.get("mt_show", 20)
-        for _, row in df.head(show).iterrows():
-            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 使用 {row['team_count']} 次 · 最近 {format_ts(row['last_time'])}"
-            st.markdown(header)
-            st.markdown(team_card_html(row), unsafe_allow_html=True)
-        if show < len(df):
-            if st.button(f"显示更多(剩余 {len(df) - show})"):
-                st.session_state["mt_show"] = show + 50
-        csv = df.copy()
-        csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
-        csv["战法"] = csv.apply(lambda r: " | ".join(
-            " / ".join(f"{s.get('name','')}Lv{s.get('lv','')}" for s in hero)
-            for hero in parse_skills(r["all_skill_info"], r["role"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(
-            g["name"] + (f"[{g['entry']}]" if g.get("entry") else "") + f"Lv{g.get('lv','')}"
-            for g in parse_gears(r["gear_info"], r["role"])), axis=1)
-        st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "member_teams.csv")
-
-elif page == "敌军队伍":
-    st.header("敌军队伍")
-    st.caption("与本盟交战过的非己方同盟人员(含胜负)，已过滤无同盟归属")
-    name = st.text_input("玩家名关键词", key="en")
-    min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="e")
-    if st.button("查询", type="primary"):
-        if not name.strip():
-            st.warning("请输入玩家名关键词后再查询(避免全量扫描)")
-            st.session_state.pop("et_df", None)
-            st.session_state.pop("et_show", None)
-        else:
-            with st.spinner("查询中..."):
-                df = safe_query(query_enemy_teams, int(min_hp), name.strip(), db=_cur_db)
-            if df is None:
-                st.session_state.pop("et_df", None)
-                st.session_state.pop("et_show", None)
-            else:
-                st.session_state["et_df"] = df
-                st.session_state["et_show"] = 20
-    if "et_df" in st.session_state and len(st.session_state["et_df"]):
-        df = st.session_state["et_df"]
-        st.success(f"共 {len(df)} 支队伍")
-        show = st.session_state.get("et_show", 20)
-        for _, row in df.head(show).iterrows():
-            header = f"**{row['player_name']}** · 红度 {row['total_star']} · 兵力 {row['hp']} · 交战 {row['encounter_count']} 次 · 最近 {format_ts(row['last_time'])}"
-            st.markdown(header)
-            st.markdown(team_card_html(row), unsafe_allow_html=True)
-        if show < len(df):
-            if st.button(f"显示更多(剩余 {len(df) - show})"):
-                st.session_state["et_show"] = show + 50
-        csv = df.copy()
-        csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
-        csv["战法"] = csv.apply(lambda r: " | ".join(
-            " / ".join(f"{s.get('name','')}Lv{s.get('lv','')}" for s in hero)
-            for hero in parse_skills(r["all_skill_info"], r["role"])), axis=1)
-        csv["宝物"] = csv.apply(lambda r: " | ".join(
-            g["name"] + (f"[{g['entry']}]" if g.get("entry") else "") + f"Lv{g.get('lv','')}"
-            for g in parse_gears(r["gear_info"], r["role"])), axis=1)
-        st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "enemy_teams.csv")
-
-elif page == "成员活跃度":
-    st.header("成员活跃度")
-    mode = st.radio("面板", ["每周活跃度", "赛季总活跃度"], key="act_mode", horizontal=True)
-    if mode == "每周活跃度":
-        week_opt = st.radio("选择周", ["本周", "上周", "前两周"], key="act_week", horizontal=True)
-        week_off = {"本周": 0, "上周": -1, "前两周": -2}[week_opt]
-        with st.spinner("查询中..."):
-            df = safe_query(query_weekly_activity, week_off, db=_cur_db)
-        if df is None:
-            st.stop()
-        if len(df):
-            st.success(f"共 {len(df)} 名成员")
-            disp = df.copy()
-            disp["最近参战"] = disp["last_time"].apply(format_ts)
-            st.dataframe(disp[["name", "group", "contribute_week", "atk_count", "def_count", "land_count", "最近参战"]].rename(
-                columns={"name": "成员", "group": "分组", "contribute_week": "周贡献",
-                         "atk_count": "进攻场次", "def_count": "防守场次", "land_count": "翻地次数"}),
-                use_container_width=True, hide_index=True)
-            st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), f"weekly_activity_w{week_off}.csv")
+st.title("🗡️ 同盟队伍查询")
+player_kw = st.text_input("人名关键字(如: 张三 / 龍風)")
+union_kw = st.text_input("同盟名关键字(如: 龙 / 風雲)")
+if st.button("查询", type="primary"):
+    if not player_kw.strip() and not union_kw.strip():
+        st.warning("请输入人名关键字或同盟名关键字后再查询(避免全量扫描)")
+        st.session_state.pop("q_df", None)
+        st.session_state.pop("q_show", None)
     else:
         with st.spinner("查询中..."):
-            df = safe_query(query_member_activity, db=_cur_db)
-        if df is None:
-            st.stop()
-        if len(df):
-            st.success(f"共 {len(df)} 名成员")
-            disp = df.copy()
-            disp["最近参战"] = disp["last_time"].apply(format_ts)
-            st.dataframe(disp[["name", "group", "wu", "power", "atk_count", "def_count", "land_count", "最近参战"]].rename(
-                columns={"name": "成员", "group": "分组", "wu": "武勋", "power": "势力",
-                         "atk_count": "进攻场次", "def_count": "防守场次", "land_count": "翻地次数"}),
-                use_container_width=True, hide_index=True)
-            st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "season_activity.csv")
+            df = safe_query(query_teams, player_kw.strip(), union_kw.strip())
+        st.session_state["q_df"] = df
+        st.session_state["q_show"] = 20
 
-elif page == "AI 小秘书":
-    st.header("🤖 AI 小秘书")
-    # 注意: 不使用 st.chat_input/st.chat_message(存在 removeChild DOM 竞态 bug)，改用普通输入框
-    if "ai_history" not in st.session_state:
-        st.session_state.ai_history = []
-    with st.form("ai_form", clear_on_submit=True):
-        q = st.text_input("问点什么?例如:谁的武勋最高?张三的队伍配置?", key="ai_q")
-        sent = st.form_submit_button("发送", type="primary")
-    if sent and q.strip():
-        st.session_state.ai_history.append(("user", q.strip()))
-        with st.spinner("思考中..."):
-            answer = ai_chat(q.strip(), db=_cur_db)
-        st.session_state.ai_history.append(("assistant", answer))
-
-    for role, content in st.session_state.ai_history[-20:]:
-        if role == "user":
-            st.markdown(f'<div style="text-align:right;background:#e8f0fe;border-radius:10px;'
-                        f'padding:8px 12px;margin:4px 0">{content}</div>', unsafe_allow_html=True)
-        else:
-            st.markdown(f'<div style="background:#f6f6f6;border-radius:10px;'
-                        f'padding:8px 12px;margin:4px 0">{content}</div>', unsafe_allow_html=True)
+if "q_df" in st.session_state and st.session_state["q_df"] is not None and len(st.session_state["q_df"]):
+    df = st.session_state["q_df"]
+    st.success(f"共 {len(df)} 支队伍")
+    show = st.session_state.get("q_show", 20)
+    for _, row in df.head(show).iterrows():
+        header = (f"**{row['player_name']}** · {row['union_name']} · 红度 {row['total_star']} · "
+                  f"兵力 {row['hp']} · 使用 {row['team_count']} 次 · 最近 {format_ts(row['last_time'])}")
+        st.markdown(header)
+        st.markdown(team_card_html(row), unsafe_allow_html=True)
+    if show < len(df):
+        if st.button(f"显示更多(剩余 {len(df) - show})"):
+            st.session_state["q_show"] = show + 50
+    csv = df.copy()
+    csv["武将"] = csv.apply(lambda r: " / ".join(hero_name(r[f"h{i}"]) for i in (1, 2, 3)), axis=1)
+    csv["战法"] = csv.apply(lambda r: " | ".join(
+        " / ".join(f"{s.get('name','')}Lv{s.get('lv','')}" for s in hero)
+        for hero in parse_skills(r["all_skill_info"], r["role"])), axis=1)
+    csv["宝物"] = csv.apply(lambda r: " | ".join(
+        g["name"] + (f"[{g['entry']}]" if g.get("entry") else "") + f"Lv{g.get('lv','')}"
+        for g in parse_gears(r["gear_info"], r["role"])), axis=1)
+    st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "teams.csv")
