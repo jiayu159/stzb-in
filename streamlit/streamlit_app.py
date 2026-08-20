@@ -107,8 +107,13 @@ class TursoConnection:
         pass
 
 
-def get_conn():
-    # 优先云端 Turso 实时库(secrets 配置 TURSO_URL/TURSO_TOKEN)，否则本地文件
+def get_conn(db_key=None):
+    # 优先按 db_key/侧边栏选中的数据库(总表 app_databases)连接，否则 secrets 直连，最后本地文件兜底
+    db_key = db_key or st.session_state.get("db_key", "")
+    if db_key:
+        for d in load_databases():
+            if d["name"] == db_key and d.get("url") and d.get("token"):
+                return TursoConnection(d["url"], d["token"])
     turso_url = st.secrets.get("TURSO_URL", "")
     turso_token = st.secrets.get("TURSO_TOKEN", "")
     if turso_url and turso_token:
@@ -116,6 +121,76 @@ def get_conn():
     conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+# ---------- 多数据库总表 ----------
+
+def admin_conn():
+    """管理库连接(总表所在库)"""
+    url = st.secrets.get("TURSO_URL", "")
+    token = st.secrets.get("TURSO_TOKEN", "")
+    return TursoConnection(url, token) if (url and token) else None
+
+
+def ensure_app_databases():
+    """在管理库创建总表 app_databases，若为空则自动注册默认库(secrets 自身)"""
+    conn = admin_conn()
+    if conn is None:
+        return
+    conn.execute(
+        """CREATE TABLE IF NOT EXISTS app_databases (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT UNIQUE NOT NULL,
+            url TEXT NOT NULL,
+            token TEXT NOT NULL,
+            note TEXT DEFAULT '',
+            enabled INTEGER DEFAULT 1
+        )"""
+    )
+    n = conn.execute("SELECT COUNT(*) FROM app_databases").fetchone()[0]
+    if n == 0:
+        conn.execute(
+            "INSERT INTO app_databases (name, url, token, note) VALUES (?, ?, ?, ?)",
+            ["默认库", st.secrets.get("TURSO_URL", ""), st.secrets.get("TURSO_TOKEN", ""), "Secrets 直连库"],
+        )
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def load_databases():
+    """读取总表全部启用数据库(供侧边栏选择与连接)"""
+    conn = admin_conn()
+    if conn is None:
+        return []
+    ensure_app_databases()
+    cur = conn.execute(
+        "SELECT id, name, url, token, note, enabled FROM app_databases WHERE enabled = 1 ORDER BY id"
+    )
+    cols = [d[0] for d in cur.description]
+    return [dict(zip(cols, r)) for r in cur.fetchall()]
+
+
+def add_database(name, url, token, note=""):
+    conn = admin_conn()
+    if conn is None:
+        return "未配置管理库(TURSO_URL/TURSO_TOKEN)"
+    try:
+        conn.execute(
+            "INSERT INTO app_databases (name, url, token, note) VALUES (?, ?, ?, ?)",
+            [name.strip(), url.strip(), token.strip(), note.strip()],
+        )
+        load_databases.clear()
+        return "ok"
+    except Exception as e:
+        return f"失败: {e}"
+
+
+def delete_database(name):
+    conn = admin_conn()
+    if conn is None:
+        return "未配置管理库"
+    conn.execute("UPDATE app_databases SET enabled = 0 WHERE name = ?", [name])
+    load_databases.clear()
+    return "ok"
 
 
 def resolve_my_union(conn):
@@ -341,9 +416,9 @@ def format_ts(ts):
     return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
 
 @st.cache_data(ttl=10, show_spinner=False)
-def query_member_teams(min_hp=0, name=""):
+def query_member_teams(min_hp=0, name="", db=None):
     """同盟成员常用队伍：默认每名成员最新一个队伍；搜索具体玩家时按阵容分组显示其全部队伍"""
-    conn = get_conn()
+    conn = get_conn(db)
     name_cond = "AND attack_name LIKE ?" if name else ""
     name_cond2 = "AND defend_name LIKE ?" if name else ""
     if name:
@@ -392,9 +467,9 @@ def query_member_teams(min_hp=0, name=""):
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def query_enemy_teams(min_hp=0, name=""):
+def query_enemy_teams(min_hp=0, name="", db=None):
     """交战过的非己方同盟人员队伍(含胜负、过滤无归属)，按交战次数递减"""
-    conn = get_conn()
+    conn = get_conn(db)
     my_union = resolve_my_union(conn)
     name_cond = "AND defend_name LIKE ?" if name else ""
     name_cond2 = "AND attack_name LIKE ?" if name else ""
@@ -457,9 +532,9 @@ def week_start(offset=0):
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def query_weekly_activity(week_offset=0):
+def query_weekly_activity(week_offset=0, db=None):
     """每周活跃度: 指定周(周一0点起7天)的参战/翻地/周贡献"""
-    conn = get_conn()
+    conn = get_conn(db)
     start, end = week_start(week_offset), week_start(week_offset) + 7 * 86400
     my_union = resolve_my_union(conn)
     sql = """
@@ -483,9 +558,9 @@ def query_weekly_activity(week_offset=0):
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def query_member_activity():
+def query_member_activity(db=None):
     """成员活跃度 + 翻地次数"""
-    conn = get_conn()
+    conn = get_conn(db)
     my_union = resolve_my_union(conn)
     sql = """
     SELECT t.name, t.`group`, t.wu, t.power,
@@ -506,8 +581,8 @@ def query_member_activity():
 
 
 @st.cache_data(ttl=10, show_spinner=False)
-def query_battle_reports(name="", min_hp=0, limit=500):
-    conn = get_conn()
+def query_battle_reports(name="", min_hp=0, limit=500, db=None):
+    conn = get_conn(db)
     cond, params = [], []
     if name:
         cond.append("(attack_name LIKE ? OR defend_name LIKE ? OR wid_name LIKE ?)")
@@ -538,7 +613,7 @@ AI_SCHEMA = """数据库为 SQLite 只读库，共 3 张表：
 只允许 SELECT 开头的只读查询。"""
 
 
-def ai_chat(message):
+def ai_chat(message, db=None):
     api_key = st.secrets.get("AI_API_KEY", "")
     if not api_key:
         return "未配置 AI_API_KEY（Streamlit 的 Secrets 中设置）"
@@ -562,7 +637,7 @@ def ai_chat(message):
 
     # 阶段2：本地执行
     try:
-        conn = get_conn()
+        conn = get_conn(db)
         df = pd.read_sql_query(sql, conn)
     except Exception as e:
         return "查询执行失败: " + str(e)
@@ -590,6 +665,35 @@ def ai_chat(message):
 st.sidebar.title("🗡️ 同盟数据查询")
 page = st.sidebar.radio("功能", ["战报查询", "同盟成员常用队伍", "敌军队伍", "成员活跃度", "AI 小秘书"])
 
+# 数据库选择(总表 app_databases)：进入时选择使用的库，全局生效
+_db_list = load_databases()
+_db_names = [d["name"] for d in _db_list]
+_cur_db = st.session_state.get("db_key", "")
+if _db_names:
+    _idx = _db_names.index(_cur_db) if _cur_db in _db_names else 0
+    _sel = st.sidebar.selectbox("选择数据库", _db_names, index=_idx, key="db_select")
+    if _sel != st.session_state.get("db_key"):
+        st.cache_data.clear()
+        st.session_state["db_key"] = _sel
+    _cur_db = _sel
+st.session_state.setdefault("db_key", _cur_db)
+
+with st.sidebar.expander("数据库管理"):
+    with st.form("add_db_form", clear_on_submit=True):
+        _n = st.text_input("名称", key="adn")
+        _u = st.text_input("URL(https://xxx.turso.io)", key="adu")
+        _t = st.text_input("Token", type="password", key="adt")
+        _note = st.text_input("备注", key="adno")
+        if st.form_submit_button("添加数据库"):
+            if _n and _u and _t:
+                st.sidebar.write(add_database(_n, _u, _t, _note))
+            else:
+                st.sidebar.write("名称/URL/Token 不能为空")
+    if _db_names:
+        _del = st.sidebar.selectbox("删除(禁用)数据库", _db_names, key="db_del")
+        if st.sidebar.button("删除选中"):
+            st.sidebar.write(delete_database(_del))
+
 using_turso = bool(st.secrets.get("TURSO_URL", "") and st.secrets.get("TURSO_TOKEN", ""))
 if not using_turso and not os.path.exists(DB_PATH):
     st.error(f"未找到数据库文件: {DB_PATH}。请把 .db 文件放到仓库根目录并命名为 data.db，"
@@ -605,7 +709,7 @@ if page == "战报查询":
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000)
     if st.button("查询", type="primary"):
         with st.spinner("查询中..."):
-            df = query_battle_reports(name, int(min_hp))
+            df = query_battle_reports(name, int(min_hp), db=_cur_db)
         st.success(f"共 {len(df)} 条")
         df_disp = df.copy()
         df_disp["进攻阵容"] = df_disp.apply(lambda r: " / ".join(hero_name(r[f"attack_hero{i}_id"]) for i in (1, 2, 3)), axis=1)
@@ -629,7 +733,7 @@ elif page == "同盟成员常用队伍":
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="m")
     if st.button("查询", type="primary"):
         with st.spinner("查询中..."):
-            df = query_member_teams(int(min_hp), name.strip())
+            df = query_member_teams(int(min_hp), name.strip(), db=_cur_db)
         st.session_state["mt_df"] = df
         st.session_state["mt_show"] = 20
     if "mt_df" in st.session_state and len(st.session_state["mt_df"]):
@@ -660,7 +764,7 @@ elif page == "敌军队伍":
     min_hp = st.number_input("兵力下限", 0, 99999, 0, step=1000, key="e")
     if st.button("查询", type="primary"):
         with st.spinner("查询中..."):
-            df = query_enemy_teams(int(min_hp), name.strip())
+            df = query_enemy_teams(int(min_hp), name.strip(), db=_cur_db)
         st.session_state["et_df"] = df
         st.session_state["et_show"] = 20
     if "et_df" in st.session_state and len(st.session_state["et_df"]):
@@ -691,7 +795,7 @@ elif page == "成员活跃度":
         week_opt = st.radio("选择周", ["本周", "上周", "前两周"], key="act_week", horizontal=True)
         week_off = {"本周": 0, "上周": -1, "前两周": -2}[week_opt]
         with st.spinner("查询中..."):
-            df = query_weekly_activity(week_off)
+            df = query_weekly_activity(week_off, db=_cur_db)
         if len(df):
             st.success(f"共 {len(df)} 名成员")
             disp = df.copy()
@@ -703,7 +807,7 @@ elif page == "成员活跃度":
             st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), f"weekly_activity_w{week_off}.csv")
     else:
         with st.spinner("查询中..."):
-            df = query_member_activity()
+            df = query_member_activity(db=_cur_db)
         if len(df):
             st.success(f"共 {len(df)} 名成员")
             disp = df.copy()
@@ -725,7 +829,7 @@ elif page == "AI 小秘书":
     if sent and q.strip():
         st.session_state.ai_history.append(("user", q.strip()))
         with st.spinner("思考中..."):
-            answer = ai_chat(q.strip())
+            answer = ai_chat(q.strip(), db=_cur_db)
         st.session_state.ai_history.append(("assistant", answer))
 
     for role, content in st.session_state.ai_history[-20:]:
