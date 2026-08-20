@@ -732,20 +732,46 @@ def ai_chat(message, db=None):
 # ---------- 页面 ----------
 
 st.sidebar.title("🗡️ 同盟数据查询")
-page = st.sidebar.radio("功能", ["战报查询", "同盟成员常用队伍", "敌军队伍", "成员活跃度", "AI 小秘书"])
 
-# 数据库选择(总表 app_databases)：进入时选择使用的库，全局生效
+# 数据库选择(总表 app_databases)：进入查询界面之前，先按子表名字选择要用的库
 _db_list = load_databases()
 _db_names = [d["name"] for d in _db_list]
 _cur_db = st.session_state.get("db_key", "")
-if _db_names:
+
+if not _db_names:
+    st.error("没有可用的数据库，请先到侧边栏「数据库管理」添加。")
+    with st.sidebar.expander("数据库管理"):
+        with st.form("add_db_form", clear_on_submit=True):
+            _n = st.text_input("名称", key="adn")
+            _u = st.text_input("URL(https://xxx.turso.io)", key="adu")
+            _t = st.text_input("Token", type="password", key="adt")
+            _note = st.text_input("备注", key="adno")
+            if st.form_submit_button("添加数据库"):
+                if _n and _u and _t:
+                    st.sidebar.write(add_database(_n, _u, _t, _note))
+                else:
+                    st.sidebar.write("名称/URL/Token 不能为空")
+    st.stop()
+
+if not st.session_state.get("db_confirmed", False):
+    st.title("🗡️ 同盟数据查询")
+    st.subheader("选择要查询的数据库")
     _idx = _db_names.index(_cur_db) if _cur_db in _db_names else 0
-    _sel = st.sidebar.selectbox("选择数据库", _db_names, index=_idx, key="db_select")
-    if _sel != st.session_state.get("db_key"):
-        st.cache_data.clear()
+    _sel = st.selectbox("数据库(按子表名字选择)", _db_names, index=_idx)
+    if st.button("进入查询界面", type="primary"):
+        if _sel != _cur_db:
+            st.cache_data.clear()
         st.session_state["db_key"] = _sel
-    _cur_db = _sel
-st.session_state.setdefault("db_key", _cur_db)
+        st.session_state["db_confirmed"] = True
+        st.rerun()
+    st.stop()
+
+_cur_db = st.session_state["db_key"]
+st.sidebar.caption(f"当前数据库: {_cur_db}")
+if st.sidebar.button("切换数据库"):
+    st.cache_data.clear()
+    st.session_state["db_confirmed"] = False
+    st.rerun()
 
 with st.sidebar.expander("数据库管理"):
     with st.form("add_db_form", clear_on_submit=True):
@@ -762,6 +788,8 @@ with st.sidebar.expander("数据库管理"):
         _del = st.sidebar.selectbox("删除(禁用)数据库", _db_names, key="db_del")
         if st.sidebar.button("删除选中"):
             st.sidebar.write(delete_database(_del))
+
+page = st.sidebar.radio("功能", ["战报查询", "同盟成员常用队伍", "敌军队伍", "成员活跃度", "AI 小秘书"])
 
 using_turso = bool(st.secrets.get("TURSO_URL", "") and st.secrets.get("TURSO_TOKEN", ""))
 if not using_turso and not os.path.exists(DB_PATH):
