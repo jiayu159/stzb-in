@@ -24,3 +24,5 @@ fetch_debug.log
 # 系统文件
 Thumbs.db
 .DS_Store
+# AI 功能源码(含接口凭据，禁止提交)
+ai.go
