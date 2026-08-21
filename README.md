@@ -15,8 +15,8 @@
 
 ### 1. 安装依赖
 
-- **Node.js**：安装包位于本目录上级文件夹，或到 https://nodejs.org/ 下载
-- **Npcap**：安装包位于本目录上级文件夹，或到 https://npcap.com/#download 下载，安装时**必须勾选 "Install in WinPcap API-compatible Mode"**
+- **Node.js**：到 https://nodejs.org/ 下载，不需要自行构建时可不用直接下载Npcap就可以直接运行程序
+- **Npcap**： https://npcap.com/#download 下载，安装时**必须勾选 "Install in WinPcap API-compatible Mode"**
 
 ### 2. 启动程序
 
