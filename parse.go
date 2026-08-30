@@ -290,7 +290,7 @@ func parseBattleData(data []byte) {
 	}
 
 	// 自动翻阅模式：检查时间边界
-	if (global.ExVar.NeedAutoScroll || global.ExVar.NeedAutoScrollDetect) && global.AppCtx != nil {
+	if (global.ExVar.NeedAutoScroll || global.ExVar.NeedAutoScrollDetect || global.ExVar.NeedAdbScroll) && global.AppCtx != nil {
 		latestTime := int64(0)
 		var jsondata [][]any
 		json.Unmarshal(msgdata, &jsondata)

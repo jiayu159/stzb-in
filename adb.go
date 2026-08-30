@@ -227,7 +227,13 @@ func StartAdbScroll(targetTime int64, swipeDurationMs float64, swipeDistance int
 	defer func() {
 		adbModeRunning = false
 		global.ExVar.NeedAdbScroll = false
+		global.ExVar.AutoScrollTargetTime = 0
+		global.ExVar.AutoScrollStopTime = 0
 	}()
+	// 初始化截止时间状态：解析战报时依据 AutoScrollTargetTime 判断是否已翻过截止点，
+	// 并记录 AutoScrollStopTime（新到旧翻阅中，第一条早于截止时间的战报时间）供循环停止判断
+	global.ExVar.AutoScrollTargetTime = targetTime
+	global.ExVar.AutoScrollStopTime = 0
 
 	if waitMs < 0 {
 		waitMs = 0
@@ -309,13 +315,18 @@ func StartAdbScroll(targetTime int64, swipeDurationMs float64, swipeDistance int
 				}
 				lastReportCount = count
 				if noNewReportCount >= 5 {
-					log.Println("连续多次没有新战报,停止翻阅")
-					emit("autoScrollStopped", map[string]interface{}{
-						"reason":   "noMoreData",
-						"scrolls":  scrollCount,
-						"stopTime": global.ExVar.AutoScrollStopTime,
-					})
-					return
+					noNewReportCount = 0
+					log.Println("连续多次没有新战报,等待5秒后继续翻阅")
+					select {
+					case <-cancelChan:
+						emit("autoScrollStopped", map[string]interface{}{
+							"reason":   "userCancel",
+							"scrolls":  scrollCount,
+							"stopTime": global.ExVar.AutoScrollStopTime,
+						})
+						return
+					case <-time.After(5 * time.Second):
+					}
 				}
 			}
 
