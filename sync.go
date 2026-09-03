@@ -166,7 +166,7 @@ func syncOnce() {
 	}
 
 	for _, t := range syncTables {
-		if err := syncTableDelta(t); err != nil {
+		if _, err := syncTableDelta(t); err != nil {
 			syncMu.Lock()
 			syncLastErr = fmt.Sprintf("%s: %v", t.Name, err)
 			syncMu.Unlock()
@@ -182,9 +182,79 @@ func syncOnce() {
 	log.Println("同步器: 本轮同步完成")
 }
 
+// syncResult 单张表的同步结果
+type syncResult struct {
+	Table  string `json:"table"`
+	Status string `json:"status"` // ok / fail
+	Count  int64  `json:"count"`
+	Err    string `json:"err"`
+}
+
+// syncOnceDetailed 手动推送用的逐表同步：每张表都尝试并记录成功/失败明细，失败不中断后续表
+func syncOnceDetailed() []syncResult {
+	syncMu.Lock()
+	if syncRunning {
+		syncMu.Unlock()
+		return nil
+	}
+	syncRunning = true
+	syncMu.Unlock()
+	defer func() {
+		syncMu.Lock()
+		syncRunning = false
+		syncMu.Unlock()
+	}()
+
+	var results []syncResult
+	if !syncEnabled || model.Conn == nil {
+		return results
+	}
+
+	ensureSyncTables()
+	if err := ensureCloudSchema(); err != nil {
+		results = append(results, syncResult{Table: "云端建表", Status: "fail", Err: err.Error()})
+		syncMu.Lock()
+		syncLastErr = err.Error()
+		syncMu.Unlock()
+		log.Printf("同步器: 手动推送 云端建表失败: %v", err)
+		return results
+	}
+
+	for _, t := range syncTables {
+		count, err := syncTableDelta(t)
+		if err != nil {
+			results = append(results, syncResult{Table: t.Name, Status: "fail", Err: err.Error()})
+			syncMu.Lock()
+			syncLastErr = fmt.Sprintf("%s: %v", t.Name, err)
+			syncMu.Unlock()
+			log.Printf("同步器: 手动推送 表 %s 推送失败: %v", t.Name, err)
+			continue
+		}
+		results = append(results, syncResult{Table: t.Name, Status: "ok", Count: count})
+		log.Printf("同步器: 手动推送 表 %s 推送成功 %d 条", t.Name, count)
+	}
+
+	syncMu.Lock()
+	syncLastRun = time.Now().Unix()
+	allOK := true
+	for _, r := range results {
+		if r.Status != "ok" {
+			allOK = false
+			break
+		}
+	}
+	if allOK {
+		syncLastErr = ""
+		log.Println("同步器: 手动推送 本轮全部完成")
+	}
+	syncMu.Unlock()
+	return results
+}
+
 // syncTableDelta 同步单张表。ReplaceAll 表按 name 刷新(只删本地这批名字的云端旧记录，保留其他机器同步的成员)，
-// 其余按主键增量，失败不推进游标
-func syncTableDelta(t syncTable) error {
+// 其余按主键增量，失败不推进游标。返回成功条数；失败时错误信息包含具体数据(主键)与原因
+func syncTableDelta(t syncTable) (int64, error) {
+	var total int64
 	var lastID int64
 	if t.ReplaceAll {
 		// 从本地读出全部成员名，云端仅删除这些名字的旧记录(分批)，避免本地是云端子集时整表覆盖丢失他人数据
@@ -200,16 +270,17 @@ func syncTableDelta(t syncTable) error {
 				lits = append(lits, sqlLiteral(n))
 			}
 			if err := tursoExecute("DELETE FROM team_user WHERE name IN (" + strings.Join(lits, ",") + ")"); err != nil {
-				return err
+				return 0, fmt.Errorf("按 name 刷新 %d 个成员失败: %v", len(names), err)
 			}
 		}
 		log.Printf("同步器: %s 按 name 刷新 %d 个成员", t.Name, len(names))
 		lastID = 0
+		total = int64(len(names))
 	} else {
 		var err error
 		lastID, err = getCursor(t.Name)
 		if err != nil {
-			return fmt.Errorf("读取游标失败: %w", err)
+			return 0, fmt.Errorf("读取游标失败: %w", err)
 		}
 	}
 
@@ -218,12 +289,12 @@ func syncTableDelta(t syncTable) error {
 			fmt.Sprintf("SELECT * FROM %s WHERE %s > ? ORDER BY %s LIMIT 100", t.Name, t.PkColumn, t.PkColumn),
 			lastID).Rows()
 		if err != nil {
-			return err
+			return total, err
 		}
 		cols, err := rows.Columns()
 		if err != nil {
 			rows.Close()
-			return err
+			return total, err
 		}
 		colsQuoted := make([]string, len(cols))
 		for i, c := range cols {
@@ -231,6 +302,7 @@ func syncTableDelta(t syncTable) error {
 		}
 
 		var batch []string
+		var ids []string
 		maxID := lastID
 		count := 0
 		for rows.Next() {
@@ -241,14 +313,17 @@ func syncTableDelta(t syncTable) error {
 			}
 			if err := rows.Scan(ptrs...); err != nil {
 				rows.Close()
-				return err
+				return total, err
 			}
 			var valParts []string
 			for i, v := range vals {
 				valParts = append(valParts, sqlLiteral(v))
 				if cols[i] == t.PkColumn {
-					if n, ok := toInt64(v); ok && n > maxID {
-						maxID = n
+					if n, ok := toInt64(v); ok {
+						if n > maxID {
+							maxID = n
+						}
+						ids = append(ids, strconv.FormatInt(n, 10))
 					}
 				}
 			}
@@ -257,29 +332,36 @@ func syncTableDelta(t syncTable) error {
 		}
 		rows.Close()
 		if rows.Err() != nil {
-			return rows.Err()
+			return total, rows.Err()
 		}
 
 		if count == 0 {
-			return nil
+			return total, nil
 		}
 
 		sql := fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES %s",
 			t.Name, strings.Join(colsQuoted, ","), strings.Join(batch, ","))
 		if err := tursoExecute(sql); err != nil {
-			return err
+			// 失败时把本批数据(主键)和云端原因一并返回，便于定位
+			rangeDesc := strings.Join(ids, ",")
+			if len(ids) > 20 {
+				rangeDesc = strings.Join(ids[:20], ",") + fmt.Sprintf("...共%d条", len(ids))
+			}
+			return total, fmt.Errorf("推送本批 %d 条失败(主键: %s): %v", count, rangeDesc, err)
 		}
+
+		total += int64(count)
 
 		// 游标推进到本批最大主键（ReplaceAll 模式无需游标）
 		if !t.ReplaceAll {
 			if err := setCursor(t.Name, maxID); err != nil {
-				return fmt.Errorf("游标写入失败: %w", err)
+				return total, fmt.Errorf("游标写入失败: %w", err)
 			}
 		}
 		log.Printf("同步器: %s 已同步 %d 条(游标 %d)", t.Name, count, maxID)
 
 		if count < 100 {
-			return nil
+			return total, nil
 		}
 		lastID = maxID
 	}
@@ -435,7 +517,7 @@ func ensureCloudSchema() error {
 		}
 		sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", t.Name, strings.Join(colDefs, ","))
 		if err := tursoExecute(sql); err != nil {
-			return err
+			return fmt.Errorf("云端建表 %s 失败: %v", t.Name, err)
 		}
 	}
 	return nil
@@ -469,16 +551,27 @@ func (a *App) ManualSync() string {
 		return global.Response{Message: "云同步未启用（turso.json 缺失或 url/token 为空），无法推送"}.Error()
 	}
 
-	// 强制跑一轮同步（syncOnce 内部有 syncRunning 互斥，可安全并发调用）
-	syncOnce()
-
-	syncMu.Lock()
-	defer syncMu.Unlock()
-	if syncLastErr != "" {
-		return global.Response{Message: "同步失败: " + syncLastErr}.Error()
+	// 逐表执行一轮同步并收集成功/失败明细
+	results := syncOnceDetailed()
+	if results == nil {
+		return global.Response{Message: "已有同步任务正在运行，请稍后再试"}.Error()
 	}
-	return global.Response{Data: map[string]interface{}{
-		"last_run": syncLastRun,
-		"enabled":  syncEnabled,
-	}}.Success()
+
+	okCount, failCount := 0, 0
+	for _, r := range results {
+		if r.Status == "ok" {
+			okCount++
+		} else {
+			failCount++
+		}
+	}
+	log.Printf("同步器: 手动推送完成, 成功 %d 张表, 失败 %d 张表（详见上方逐表日志）", okCount, failCount)
+
+	if failCount > 0 {
+		return global.Response{
+			Message: fmt.Sprintf("同步完成，成功 %d 张表、失败 %d 张表（详见运行日志）", okCount, failCount),
+			Data:    results,
+		}.Error()
+	}
+	return global.Response{Data: results}.Success()
 }
