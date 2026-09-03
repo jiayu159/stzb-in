@@ -102,6 +102,38 @@ func initSync() {
 	log.Printf("同步器: 已启用，目标 %s", syncCfg.URL)
 }
 
+// 每张表上次成功同步时的本地数据指纹(MAX(pk):COUNT)，用于推送前检测本地是否有变化
+var syncFp = map[string]string{}
+
+// dataFingerprint 计算单张表本地数据指纹。battle_report/reports 用 MAX(battle_id):COUNT，能识别新增/删除；
+// team_user 用 MAX(id):COUNT，识别成员数量或最大 id 变化。均只查本地库，不产生云端请求
+func dataFingerprint(t syncTable) string {
+	var maxID int64
+	var cnt int64
+	model.Conn.Raw(
+		fmt.Sprintf("SELECT COALESCE(MAX(%s),0), COUNT(*) FROM %s", t.PkColumn, t.Name),
+	).Row().Scan(&maxID, &cnt)
+	return fmt.Sprintf("%d:%d", maxID, cnt)
+}
+
+// localChanged 检测本地数据是否与上次成功同步后发生变化。从未成功同步过视为有变化(必须推送)
+func localChanged() bool {
+	for _, t := range syncTables {
+		fp := dataFingerprint(t)
+		if last, ok := syncFp[t.Name]; !ok || last != fp {
+			return true
+		}
+	}
+	return false
+}
+
+// markSynced 每张表全部同步成功后记录其指纹，供下一轮变化检测使用
+func markSynced() {
+	for _, t := range syncTables {
+		syncFp[t.Name] = dataFingerprint(t)
+	}
+}
+
 // StartSyncLoop 后台同步循环: 数据库未打开时每 5 秒重试初始化，就绪后同步一次，之后每 30 秒或收到入库信号时同步
 func StartSyncLoop() {
 	for {
@@ -156,12 +188,20 @@ func syncOnce() {
 		return
 	}
 
+	// 推送前先检测本地数据是否有变化，没有变化则跳过本轮推送，避免频繁请求浪费云端资源
+	if !localChanged() {
+		log.Println("同步器: 本地数据无变化，跳过本轮推送")
+		return
+	}
+
 	ensureSyncTables()
 	if err := ensureCloudSchema(); err != nil {
 		log.Printf("同步器: 云端建表失败: %v", err)
 		syncMu.Lock()
 		syncLastErr = fmt.Sprintf("云端建表失败: %v", err)
 		syncMu.Unlock()
+		// 作废指纹，下一轮即使本地无变化也会重试
+		syncFp = map[string]string{}
 		return
 	}
 
@@ -171,6 +211,8 @@ func syncOnce() {
 			syncLastErr = fmt.Sprintf("%s: %v", t.Name, err)
 			syncMu.Unlock()
 			log.Printf("同步器: 表 %s 同步失败: %v", t.Name, err)
+			// 作废该表指纹，下一轮重试
+			delete(syncFp, t.Name)
 			return
 		}
 	}
@@ -179,6 +221,7 @@ func syncOnce() {
 	syncLastRun = time.Now().Unix()
 	syncLastErr = ""
 	syncMu.Unlock()
+	markSynced()
 	log.Println("同步器: 本轮同步完成")
 }
 
@@ -217,6 +260,7 @@ func syncOnceDetailed() []syncResult {
 		syncLastErr = err.Error()
 		syncMu.Unlock()
 		log.Printf("同步器: 手动推送 云端建表失败: %v", err)
+		syncFp = map[string]string{}
 		return results
 	}
 
@@ -228,6 +272,7 @@ func syncOnceDetailed() []syncResult {
 			syncLastErr = fmt.Sprintf("%s: %v", t.Name, err)
 			syncMu.Unlock()
 			log.Printf("同步器: 手动推送 表 %s 推送失败: %v", t.Name, err)
+			delete(syncFp, t.Name)
 			continue
 		}
 		results = append(results, syncResult{Table: t.Name, Status: "ok", Count: count})
@@ -245,6 +290,7 @@ func syncOnceDetailed() []syncResult {
 	}
 	if allOK {
 		syncLastErr = ""
+		markSynced()
 		log.Println("同步器: 手动推送 本轮全部完成")
 	}
 	syncMu.Unlock()
@@ -675,7 +721,10 @@ func (a *App) ManualPushRecent(count int64) string {
 			continue
 		}
 		pushed += int64(end - i)
-		log.Printf("同步器: 手动推送最新战报 成功 %d 条(本批 battle_id %s~%s)", end-i, ids[i], ids[end-1])
+		// 100 条一批循环推送，日志标明第几批，便于确认 30 次×100 条的推送节奏
+		totalBatches := (len(values) + 99) / 100
+		log.Printf("同步器: 手动推送最新战报 第 %d/%d 批 成功 %d 条(本批 battle_id %s~%s)",
+			i/100+1, totalBatches, end-i, ids[i], ids[end-1])
 	}
 
 	syncMu.Lock()
