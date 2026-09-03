@@ -1,8 +1,8 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NStatistic, NGrid, NGi, NTag, NSpace, NSpin } from 'naive-ui'
-import { GetTaskList, GetTeamUser, GetVersion, GetSyncStatus, ManualSync } from '../../wailsjs/go/main/App'
-import { Activity, Trophy, Shield, Crosshair, List, Bot, CloudUpload, RefreshCw } from 'lucide-vue-next'
+import { NCard, NButton, NStatistic, NGrid, NGi, NTag, NSpace, NSpin, NInputNumber } from 'naive-ui'
+import { GetTaskList, GetTeamUser, GetVersion, GetSyncStatus, ManualSync, ManualPushRecent } from '../../wailsjs/go/main/App'
+import { Activity, Trophy, Shield, Crosshair, List, Bot, CloudUpload, RefreshCw, Send } from 'lucide-vue-next'
 
 const taskCount = ref(0)
 const memberCount = ref(0)
@@ -12,6 +12,9 @@ const syncLastRun = ref(0)
 const syncLastErr = ref('')
 const syncing = ref(false)
 const syncMsg = ref('')
+const pushCount = ref(3000)
+const pushingRecent = ref(false)
+const pushRecentMsg = ref('')
 
 function loadSyncStatus() {
     GetSyncStatus().then(v => {
@@ -41,6 +44,27 @@ function pushToCloud() {
         syncMsg.value = '调用失败，请查看运行日志'
     }).finally(() => {
         syncing.value = false
+        loadSyncStatus()
+    })
+}
+
+function pushRecentToCloud() {
+    if (!pushCount.value || pushCount.value <= 0) return
+    pushingRecent.value = true
+    pushRecentMsg.value = ''
+    ManualPushRecent(pushCount.value).then(v => {
+        let resp = JSON.parse(v)
+        pushRecentMsg.value = resp.msg || (resp.code == 200 ? '推送完成' : '推送失败')
+        if (resp.data && resp.data.pushed != null) {
+            pushRecentMsg.value = `成功推送 ${resp.data.pushed} 条` + (resp.data.failed ? `，失败 ${resp.data.failed} 条（详见日志）` : '，数据已同步到云端')
+            if (resp.data.min_battle_id && resp.data.max_battle_id) {
+                pushRecentMsg.value += `（battle_id ${resp.data.min_battle_id} ~ ${resp.data.max_battle_id}）`
+            }
+        }
+    }).catch(() => {
+        pushRecentMsg.value = '调用失败，请查看运行日志'
+    }).finally(() => {
+        pushingRecent.value = false
         loadSyncStatus()
     })
 }
@@ -94,7 +118,18 @@ onMounted(() => {
                     手动推送数据到云端
                 </n-button>
             </div>
+            <div class="sync-row">
+                <span class="sync-row-label">推送最新战报</span>
+                <n-input-number v-model:value="pushCount" :min="1" :max="3000" :step="100"
+                    :style="{ width: '140px' }" />
+                <span class="sync-row-tip">条（按 battle_id 倒序取本地最新，强制覆盖云端，用于补齐漏掉的数据）</span>
+                <n-button secondary type="info" :loading="pushingRecent" @click="pushRecentToCloud">
+                    <template #icon><Send :size="16" /></template>
+                    推送最新 {{ pushCount || 0 }} 条
+                </n-button>
+            </div>
             <div v-if="syncMsg" class="sync-msg">{{ syncMsg }}</div>
+            <div v-if="pushRecentMsg" class="sync-msg">{{ pushRecentMsg }}</div>
         </n-card>
 
         <n-grid :cols="3" :x-gap="16" :y-gap="16" class="stat-grid">
@@ -184,6 +219,26 @@ onMounted(() => {
         justify-content: space-between;
         gap: 16px;
         flex-wrap: wrap;
+    }
+
+    .sync-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        margin-top: 14px;
+        padding-top: 12px;
+        border-top: 1px solid rgba(128, 128, 128, 0.15);
+    }
+
+    .sync-row-label {
+        font-size: 13px;
+        font-weight: 600;
+    }
+
+    .sync-row-tip {
+        font-size: 12px;
+        opacity: 0.6;
     }
 
     .sync-info {
