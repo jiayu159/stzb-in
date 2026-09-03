@@ -33,13 +33,14 @@ type tursoConfig struct {
 }
 
 type syncTable struct {
-	Name     string
-	PkColumn string
+	Name       string
+	PkColumn   string
 	ReplaceAll bool // true=整表覆盖(如成员表，与本地全量替换语义一致)
+	RecentFix  int64 // >0 时手动推送最后执行一次"最新N条分批补齐"（每批100条），用于补游标区间空洞
 }
 
 var syncTables = []syncTable{
-	{Name: "battle_report", PkColumn: "battle_id"},
+	{Name: "battle_report", PkColumn: "battle_id", RecentFix: 3000},
 	{Name: "reports", PkColumn: "battle_id"},
 	{Name: "team_user", PkColumn: "id", ReplaceAll: true}, // 按 name 刷新: 只删本批名字，云端他人记录保留(并集)
 }
@@ -277,6 +278,38 @@ func syncOnceDetailed() []syncResult {
 		}
 		results = append(results, syncResult{Table: t.Name, Status: "ok", Count: count})
 		log.Printf("同步器: 手动推送 表 %s 推送成功 %d 条", t.Name, count)
+
+		// 增量推完后，若配置了 RecentFix(>0)，再执行一次"最新N条分批补齐"（每批100条），
+		// 用于补游标区间内的历史空洞；日志按第 x/y 批输出
+		if t.RecentFix > 0 {
+			fixPushed, fixFailed, _, _, _, fixMsgs, fixErr := pushRecentBatches(t.RecentFix)
+			if fixErr != nil {
+				results = append(results, syncResult{Table: t.Name + "(分批补齐)", Status: "fail", Err: fixErr.Error()})
+				syncMu.Lock()
+				syncLastErr = fmt.Sprintf("%s 分批补齐失败: %v", t.Name, fixErr)
+				syncMu.Unlock()
+				log.Printf("同步器: 手动推送 表 %s 分批补齐失败: %v", t.Name, fixErr)
+				delete(syncFp, t.Name)
+				continue
+			}
+			if fixFailed > 0 {
+				msg := strings.Join(fixMsgs, ";")
+				results = append(results, syncResult{Table: t.Name + "(分批补齐)", Status: "fail", Count: fixPushed, Err: msg})
+				syncMu.Lock()
+				syncLastErr = fmt.Sprintf("%s 分批补齐: 成功%d 失败%d", t.Name, fixPushed, fixFailed)
+				syncMu.Unlock()
+				log.Printf("同步器: 手动推送 表 %s 分批补齐: 成功 %d 失败 %d", t.Name, fixPushed, fixFailed)
+				delete(syncFp, t.Name)
+				continue
+			}
+			// 把分批补齐成功数并入该表结果
+			for i := range results {
+				if results[i].Table == t.Name && results[i].Status == "ok" {
+					results[i].Count += fixPushed
+				}
+			}
+			log.Printf("同步器: 手动推送 表 %s 分批补齐完成，共补 %d 条", t.Name, fixPushed)
+		}
 	}
 
 	syncMu.Lock()
@@ -622,6 +655,86 @@ func (a *App) ManualSync() string {
 	return global.Response{Data: results}.Success()
 }
 
+// pushRecentBatches 把本地最新 count 条战报(battle_id 倒序)分 100 条一批强制推送到云端。
+// 不走增量游标：直接按行 INSERT OR REPLACE，用于补齐游标区间内的数据空洞。
+// 返回: 成功条数, 失败条数, 失败明细, 总读取条数, 最小/最大 battle_id, 读取失败错误(非推送失败)
+func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64, failMsgs []string, readErr error) {
+	rows, err := model.Conn.Raw(
+		"SELECT * FROM battle_report ORDER BY battle_id DESC LIMIT ?", count).Rows()
+	if err != nil {
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("读取本地战报失败: %v", err)
+	}
+	defer rows.Close()
+	cols, err := rows.Columns()
+	if err != nil {
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("读取列信息失败: %v", err)
+	}
+	colsQuoted := make([]string, len(cols))
+	for i, c := range cols {
+		colsQuoted[i] = `"` + c + `"`
+	}
+
+	var values []string
+	var ids []string
+	for rows.Next() {
+		vals := make([]interface{}, len(cols))
+		ptrs := make([]interface{}, len(cols))
+		for i := range vals {
+			ptrs[i] = &vals[i]
+		}
+		if err := rows.Scan(ptrs...); err != nil {
+			return 0, 0, 0, 0, 0, nil, fmt.Errorf("读取本地战报行失败: %v", err)
+		}
+		var valParts []string
+		for i, v := range vals {
+			valParts = append(valParts, sqlLiteral(v))
+			if cols[i] == "battle_id" {
+				if n, ok := toInt64(v); ok {
+					if total == 0 {
+						maxBid = n
+					}
+					minBid = n
+					ids = append(ids, strconv.FormatInt(n, 10))
+				}
+			}
+		}
+		values = append(values, "("+strings.Join(valParts, ",")+")")
+		total++
+	}
+	if rows.Err() != nil {
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("读取本地战报结束失败: %v", rows.Err())
+	}
+	if total == 0 {
+		return 0, 0, 0, 0, 0, nil, fmt.Errorf("本地 battle_report 表暂无数据")
+	}
+
+	for i := 0; i < len(values); i += 100 {
+		end := i + 100
+		if end > len(values) {
+			end = len(values)
+		}
+		sql := fmt.Sprintf("INSERT OR REPLACE INTO battle_report (%s) VALUES %s",
+			strings.Join(colsQuoted, ","), strings.Join(values[i:end], ","))
+		if err := tursoExecute(sql); err != nil {
+			failed += int64(end - i)
+			desc := strings.Join(ids[i:end], ",")
+			if end-i > 20 {
+				desc = strings.Join(ids[i:i+20], ",") + fmt.Sprintf("...共%d条", end-i)
+			}
+			msg := fmt.Sprintf("本批 %d 条失败(主键: %s): %v", end-i, desc, err)
+			failMsgs = append(failMsgs, msg)
+			log.Printf("同步器: 分批推送最新战报 第 %d 批失败: %s", i/100+1, msg)
+			continue
+		}
+		pushed += int64(end - i)
+		// 100 条一批循环推送，日志标明第几批，便于确认 30 次×100 条的推送节奏
+		totalBatches := (len(values) + 99) / 100
+		log.Printf("同步器: 分批推送最新战报 第 %d/%d 批 成功 %d 条(本批 battle_id %s~%s)",
+			i/100+1, totalBatches, end-i, ids[i], ids[end-1])
+	}
+	return pushed, failed, total, minBid, maxBid, failMsgs, nil
+}
+
 // ManualPushRecent 手动把本地最新 count 条战报(battle_id 倒序)强制推送到云端。
 // 不走增量游标：直接按行 INSERT OR REPLACE，用于补齐游标区间内的数据空洞。
 func (a *App) ManualPushRecent(count int64) string {
@@ -647,84 +760,9 @@ func (a *App) ManualPushRecent(count int64) string {
 		return global.Response{Message: "云端建表失败: " + err.Error()}.Error()
 	}
 
-	rows, err := model.Conn.Raw(
-		"SELECT * FROM battle_report ORDER BY battle_id DESC LIMIT ?", count).Rows()
+	pushed, failed, total, minBid, maxBid, failMsgs, err := pushRecentBatches(count)
 	if err != nil {
-		return global.Response{Message: "读取本地战报失败: " + err.Error()}.Error()
-	}
-	cols, err := rows.Columns()
-	if err != nil {
-		rows.Close()
-		return global.Response{Message: "读取列信息失败: " + err.Error()}.Error()
-	}
-	colsQuoted := make([]string, len(cols))
-	for i, c := range cols {
-		colsQuoted[i] = `"` + c + `"`
-	}
-
-	var values []string
-	var ids []string
-	var maxBid, minBid int64
-	total := int64(0)
-	for rows.Next() {
-		vals := make([]interface{}, len(cols))
-		ptrs := make([]interface{}, len(cols))
-		for i := range vals {
-			ptrs[i] = &vals[i]
-		}
-		if err := rows.Scan(ptrs...); err != nil {
-			rows.Close()
-			return global.Response{Message: "读取本地战报行失败: " + err.Error()}.Error()
-		}
-		var valParts []string
-		for i, v := range vals {
-			valParts = append(valParts, sqlLiteral(v))
-			if cols[i] == "battle_id" {
-				if n, ok := toInt64(v); ok {
-					if total == 0 {
-						maxBid = n
-					}
-					minBid = n
-					ids = append(ids, strconv.FormatInt(n, 10))
-				}
-			}
-		}
-		values = append(values, "("+strings.Join(valParts, ",")+")")
-		total++
-	}
-	rows.Close()
-	if rows.Err() != nil {
-		return global.Response{Message: "读取本地战报结束失败: " + rows.Err().Error()}.Error()
-	}
-	if total == 0 {
-		return global.Response{Message: "本地 battle_report 表暂无数据"}.Error()
-	}
-
-	pushed, failed := int64(0), int64(0)
-	var failMsgs []string
-	for i := 0; i < len(values); i += 100 {
-		end := i + 100
-		if end > len(values) {
-			end = len(values)
-		}
-		sql := fmt.Sprintf("INSERT OR REPLACE INTO battle_report (%s) VALUES %s",
-			strings.Join(colsQuoted, ","), strings.Join(values[i:end], ","))
-		if err := tursoExecute(sql); err != nil {
-			failed += int64(end - i)
-			desc := strings.Join(ids[i:end], ",")
-			if end-i > 20 {
-				desc = strings.Join(ids[i:i+20], ",") + fmt.Sprintf("...共%d条", end-i)
-			}
-			msg := fmt.Sprintf("推送最新%d条中 本批 %d 条失败(主键: %s): %v", count, end-i, desc, err)
-			failMsgs = append(failMsgs, msg)
-			log.Printf("同步器: %s", msg)
-			continue
-		}
-		pushed += int64(end - i)
-		// 100 条一批循环推送，日志标明第几批，便于确认 30 次×100 条的推送节奏
-		totalBatches := (len(values) + 99) / 100
-		log.Printf("同步器: 手动推送最新战报 第 %d/%d 批 成功 %d 条(本批 battle_id %s~%s)",
-			i/100+1, totalBatches, end-i, ids[i], ids[end-1])
+		return global.Response{Message: err.Error()}.Error()
 	}
 
 	syncMu.Lock()
