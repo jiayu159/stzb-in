@@ -1,13 +1,49 @@
 <script setup>
 import { ref, onMounted } from 'vue'
-import { NCard, NButton, NStatistic, NGrid, NGi, NAlert, NTag } from 'naive-ui'
-import { GetTaskList, GetTeamUser, GetVersion } from '../../wailsjs/go/main/App'
-import { Activity, Trophy, Shield, Crosshair, List, Bot } from 'lucide-vue-next'
+import { NCard, NButton, NStatistic, NGrid, NGi, NTag, NSpace, NSpin } from 'naive-ui'
+import { GetTaskList, GetTeamUser, GetVersion, GetSyncStatus, ManualSync } from '../../wailsjs/go/main/App'
+import { Activity, Trophy, Shield, Crosshair, List, Bot, CloudUpload, RefreshCw } from 'lucide-vue-next'
 
 const taskCount = ref(0)
 const memberCount = ref(0)
 const version = ref('')
-const showNotice = ref(true)
+const syncEnabled = ref(false)
+const syncLastRun = ref(0)
+const syncLastErr = ref('')
+const syncing = ref(false)
+const syncMsg = ref('')
+
+function loadSyncStatus() {
+    GetSyncStatus().then(v => {
+        let resp = JSON.parse(v)
+        if (resp.code == 200 && resp.data) {
+            syncEnabled.value = resp.data.enabled
+            syncLastRun.value = resp.data.last_run || 0
+            syncLastErr.value = resp.data.last_err || ''
+        }
+    }).catch(() => {})
+}
+
+function pushToCloud() {
+    syncing.value = true
+    syncMsg.value = ''
+    ManualSync().then(v => {
+        let resp = JSON.parse(v)
+        if (resp.code == 200) {
+            syncMsg.value = '推送完成，数据已同步到云端'
+            if (resp.data && resp.data.last_run) {
+                syncLastRun.value = resp.data.last_run
+            }
+        } else {
+            syncMsg.value = resp.msg || '推送失败'
+        }
+    }).catch(() => {
+        syncMsg.value = '调用失败，请查看运行日志'
+    }).finally(() => {
+        syncing.value = false
+        loadSyncStatus()
+    })
+}
 
 onMounted(() => {
     GetVersion().then(v => {
@@ -30,6 +66,8 @@ onMounted(() => {
             memberCount.value = data.data.length
         }
     }).catch(() => {})
+
+    loadSyncStatus()
 })
 </script>
 
@@ -42,29 +80,22 @@ onMounted(() => {
             </div>
         </div>
 
-        <n-alert v-if="showNotice" type="info" closable @close="showNotice = false"
-            style="border-radius: 12px;">
-            <template #header>
-                <strong>📢 版本更新公告</strong>
-            </template>
-            <div style="font-size: 13px; line-height: 1.8;">
-                <p>以下功能已可用：</p>
-                <div style="display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0;">
-                    <n-tag :bordered="false" type="success" size="small">赛季看板</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">活跃度分析</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">敌军动向监控</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">热门排行</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">队伍克制分析</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">妲己小秘书（AI）</n-tag>
-                    <n-tag :bordered="false" type="success" size="small">考勤导出增强</n-tag>
-                    <n-tag :bordered="false" type="warning" size="small">同盟战报自动翻阅</n-tag>
-                    <n-tag :bordered="false" type="warning" size="small">攻城考勤时间定位</n-tag>
+        <n-card class="sync-card" embedded>
+            <div class="sync-bar">
+                <div class="sync-info">
+                    <span class="sync-title">云端数据同步</span>
+                    <n-tag v-if="syncEnabled" :bordered="false" type="success" size="small">已启用</n-tag>
+                    <n-tag v-else :bordered="false" type="warning" size="small">未启用</n-tag>
+                    <span v-if="syncLastRun" class="sync-meta">上次同步 {{ new Date(syncLastRun * 1000).toLocaleString() }}</span>
+                    <span v-if="syncLastErr" class="sync-err">上次失败: {{ syncLastErr }}</span>
                 </div>
-                <p><strong>妲己小秘书：</strong>基于 Qwen3-8B 的同盟数据 AI 助手，先分析你的问题并生成对应的 SQL 查询，在本地数据库查得结果后把字段翻译成通俗中文回答，问什么都能答。支持思考模式开关（默认开启），开启后回答更严谨，思考过程可折叠查看。</p>
-                <p><strong>自动翻阅：</strong>在「同盟战报」页面设定截止时间，程序自动在游戏中翻页抓取战报，到达指定时间自动停止。</p>
-                <p><strong>时间定位：</strong>在「攻城考勤」弹窗中设定截止时间，翻阅时自动跟踪进度，翻越截止时间点的战报自动跳过。</p>
+                <n-button type="primary" :loading="syncing" @click="pushToCloud">
+                    <template #icon><CloudUpload :size="16" /></template>
+                    手动推送数据到云端
+                </n-button>
             </div>
-        </n-alert>
+            <div v-if="syncMsg" class="sync-msg">{{ syncMsg }}</div>
+        </n-card>
 
         <n-grid :cols="3" :x-gap="16" :y-gap="16" class="stat-grid">
             <n-gi>
@@ -142,5 +173,46 @@ onMounted(() => {
 
 .stat-grid {
     margin-top: 0;
+}
+
+.sync-card {
+    border-radius: 12px;
+
+    .sync-bar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        flex-wrap: wrap;
+    }
+
+    .sync-info {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex-wrap: wrap;
+    }
+
+    .sync-title {
+        font-size: 15px;
+        font-weight: 600;
+        margin-right: 4px;
+    }
+
+    .sync-meta {
+        font-size: 12px;
+        opacity: 0.7;
+    }
+
+    .sync-err {
+        font-size: 12px;
+        color: #d03050;
+    }
+
+    .sync-msg {
+        margin-top: 10px;
+        font-size: 13px;
+        color: #18a058;
+    }
 }
 </style>

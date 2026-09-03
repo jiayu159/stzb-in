@@ -109,6 +109,8 @@ export function Greet(arg1:string):Promise<string>;
 
 export function ImportDb(arg1:string,arg2:Array<number>):Promise<string>;
 
+export function ManualSync():Promise<string>;
+
 export function SelectDb(arg1:string):Promise<string>;
 
 export function SetAiThinking(arg1:boolean):Promise<string>;

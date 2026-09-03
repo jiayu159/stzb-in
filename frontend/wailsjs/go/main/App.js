@@ -218,6 +218,10 @@ export function ImportDb(arg1, arg2) {
   return window['go']['main']['App']['ImportDb'](arg1, arg2);
 }
 
+export function ManualSync() {
+  return window['go']['main']['App']['ManualSync']();
+}
+
 export function SelectDb(arg1) {
   return window['go']['main']['App']['SelectDb'](arg1);
 }

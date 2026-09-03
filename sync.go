@@ -452,3 +452,33 @@ func (a *App) GetSyncStatus() string {
 		"last_err": syncLastErr,
 	}}.Success()
 }
+
+// ManualSync 手动强制检测配置并推送一轮数据到云端
+func (a *App) ManualSync() string {
+	if model.Conn == nil {
+		return global.Response{Message: "数据库未连接，请先选择数据库"}.Error()
+	}
+
+	// 重新读取 turso.json 并检查数据库状态，已禁用的配置不会自动启用
+	initSync()
+
+	syncMu.Lock()
+	enabled := syncEnabled
+	syncMu.Unlock()
+	if !enabled {
+		return global.Response{Message: "云同步未启用（turso.json 缺失或 url/token 为空），无法推送"}.Error()
+	}
+
+	// 强制跑一轮同步（syncOnce 内部有 syncRunning 互斥，可安全并发调用）
+	syncOnce()
+
+	syncMu.Lock()
+	defer syncMu.Unlock()
+	if syncLastErr != "" {
+		return global.Response{Message: "同步失败: " + syncLastErr}.Error()
+	}
+	return global.Response{Data: map[string]interface{}{
+		"last_run": syncLastRun,
+		"enabled":  syncEnabled,
+	}}.Success()
+}
