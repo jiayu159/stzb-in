@@ -446,8 +446,9 @@ func syncTableDelta(t syncTable) (int64, error) {
 	}
 }
 
-// tursoExecute 通过 Hrana over HTTP 执行单条 SQL（批量语句）
-func tursoExecute(sql string) error {
+// tursoPipeline 通过 Hrana over HTTP 发送单条 SQL 到云端 pipeline 端点，返回未解析的响应体字节。
+// 执行与查询共用此发送逻辑；HTTP 非 200 时直接报错
+func tursoPipeline(sql string) ([]byte, error) {
 	payload := map[string]interface{}{
 		"requests": []map[string]interface{}{
 			{
@@ -460,23 +461,35 @@ func tursoExecute(sql string) error {
 	body, _ := json.Marshal(payload)
 	req, err := http.NewRequest("POST", syncCfg.URL+"/v2/pipeline", bytes.NewReader(body))
 	if err != nil {
-		return err
+		return nil, err
 	}
 	req.Header.Set("Authorization", "Bearer "+syncCfg.Token)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := syncHTTP.Do(req)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer resp.Body.Close()
 	respBody, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
+	}
+	return respBody, nil
+}
+
+// tursoExecute 通过 Hrana over HTTP 执行单条 SQL（批量语句）
+func tursoExecute(sql string) error {
+	respBody, err := tursoPipeline(sql)
+	if err != nil {
+		return err
 	}
 	var result struct {
 		Results []struct {
-			Type     string `json:"type"`
+			Type  string `json:"type"`
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
 			Response struct {
 				Error *struct {
 					Message string `json:"message"`
@@ -488,9 +501,65 @@ func tursoExecute(sql string) error {
 		return fmt.Errorf("响应解析失败: %v (%s)", err, string(respBody))
 	}
 	if len(result.Results) > 0 && result.Results[0].Type == "error" {
+		if result.Results[0].Error != nil {
+			return fmt.Errorf("Turso 执行失败: %s", result.Results[0].Error.Message)
+		}
 		return fmt.Errorf("Turso 执行失败: %s", string(respBody))
 	}
 	return nil
+}
+
+// tursoQueryRows 查询云端并返回每行各列的字符串值。用于推送前查询云端已存在的主键，
+// 避免把已存在的行重复推送浪费额度。每行各列原始值为 {type,value}，null 时值为空字符串
+func tursoQueryRows(sql string) ([][]string, error) {
+	respBody, err := tursoPipeline(sql)
+	if err != nil {
+		return nil, err
+	}
+	var result struct {
+		Results []struct {
+			Type  string `json:"type"` // ok=成功, error=执行失败
+			Error *struct {
+				Message string `json:"message"`
+			} `json:"error"`
+			Response struct {
+				Type string `json:"type"`
+				Result struct {
+					Rows [][]struct {
+						Type  string  `json:"type"`
+						Value *string `json:"value"`
+					} `json:"rows"`
+				} `json:"result"`
+			} `json:"response"`
+		} `json:"results"`
+	}
+	if err := json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("响应解析失败: %v (%s)", err, string(respBody))
+	}
+	if len(result.Results) == 0 {
+		return nil, fmt.Errorf("云端无响应结果")
+	}
+	res := result.Results[0]
+	if res.Type == "error" {
+		if res.Error != nil {
+			return nil, fmt.Errorf("云端查询失败: %s", res.Error.Message)
+		}
+		return nil, fmt.Errorf("云端查询失败: %s", string(respBody))
+	}
+	if res.Type != "ok" {
+		return nil, fmt.Errorf("云端响应类型异常: %s", res.Type)
+	}
+	rows := make([][]string, 0, len(res.Response.Result.Rows))
+	for _, r := range res.Response.Result.Rows {
+		out := make([]string, len(r))
+		for i, cell := range r {
+			if cell.Value != nil {
+				out[i] = *cell.Value
+			}
+		}
+		rows = append(rows, out)
+	}
+	return rows, nil
 }
 
 // sqlLiteral 把数据库值转成 SQL 字面量
@@ -655,9 +724,10 @@ func (a *App) ManualSync() string {
 	return global.Response{Data: results}.Success()
 }
 
-// pushRecentBatches 把本地最新 count 条战报(battle_id 倒序)分 100 条一批强制推送到云端。
+// pushRecentBatches 把本地最新 count 条战报(battle_id 倒序)分 100 条一批推送到云端。
 // 不走增量游标：直接按行 INSERT OR REPLACE，用于补齐游标区间内的数据空洞。
-// 返回: 成功条数, 失败条数, 失败明细, 总读取条数, 最小/最大 battle_id, 读取失败错误(非推送失败)
+// 推送前先按 500 个 id/批查询云端已存在的 battle_id，已存在的行跳过、只推缺失行，节省云额度。
+// 返回: 成功条数, 失败条数, 失败明细, 总读取条数, 最小/最大 battle_id, 致命错误(本地读取失败/云端查询失败)
 func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64, failMsgs []string, readErr error) {
 	rows, err := model.Conn.Raw(
 		"SELECT * FROM battle_report ORDER BY battle_id DESC LIMIT ?", count).Rows()
@@ -708,18 +778,60 @@ func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64
 		return 0, 0, 0, 0, 0, nil, fmt.Errorf("本地 battle_report 表暂无数据")
 	}
 
-	for i := 0; i < len(values); i += 100 {
+	// 先批量(每批500个id)查询云端已存在的 battle_id，只推送缺失的行
+	existing := map[string]bool{}
+	for i := 0; i < len(ids); i += 500 {
+		end := i + 500
+		if end > len(ids) {
+			end = len(ids)
+		}
+		lits := make([]string, 0, end-i)
+		for _, id := range ids[i:end] {
+			lits = append(lits, sqlLiteral(id))
+		}
+		cloudRows, err := tursoQueryRows(
+			"SELECT battle_id FROM battle_report WHERE battle_id IN (" + strings.Join(lits, ",") + ")")
+		if err != nil {
+			return 0, 0, 0, 0, 0, nil, fmt.Errorf("查询云端已存在战报失败: %v", err)
+		}
+		for _, r := range cloudRows {
+			if len(r) > 0 {
+				existing[r[0]] = true
+			}
+		}
+	}
+
+	missVals := make([]string, 0, len(values))
+	missIds := make([]string, 0, len(ids))
+	var skipped int64
+	for i, id := range ids {
+		if existing[id] {
+			skipped++
+			continue
+		}
+		missVals = append(missVals, values[i])
+		missIds = append(missIds, id)
+	}
+	if skipped == total {
+		log.Printf("同步器: 分批推送最新战报 云端已包含全部最新 %d 条，无需推送", total)
+		return 0, 0, total, minBid, maxBid, nil, nil
+	}
+	if skipped > 0 {
+		log.Printf("同步器: 分批推送最新战报 跳过云端已有 %d 条，仅推 %d 条", skipped, len(missVals))
+	}
+
+	for i := 0; i < len(missVals); i += 100 {
 		end := i + 100
-		if end > len(values) {
-			end = len(values)
+		if end > len(missVals) {
+			end = len(missVals)
 		}
 		sql := fmt.Sprintf("INSERT OR REPLACE INTO battle_report (%s) VALUES %s",
-			strings.Join(colsQuoted, ","), strings.Join(values[i:end], ","))
+			strings.Join(colsQuoted, ","), strings.Join(missVals[i:end], ","))
 		if err := tursoExecute(sql); err != nil {
 			failed += int64(end - i)
-			desc := strings.Join(ids[i:end], ",")
+			desc := strings.Join(missIds[i:end], ",")
 			if end-i > 20 {
-				desc = strings.Join(ids[i:i+20], ",") + fmt.Sprintf("...共%d条", end-i)
+				desc = strings.Join(missIds[i:i+20], ",") + fmt.Sprintf("...共%d条", end-i)
 			}
 			msg := fmt.Sprintf("本批 %d 条失败(主键: %s): %v", end-i, desc, err)
 			failMsgs = append(failMsgs, msg)
@@ -727,16 +839,16 @@ func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64
 			continue
 		}
 		pushed += int64(end - i)
-		// 100 条一批循环推送，日志标明第几批，便于确认 30 次×100 条的推送节奏
-		totalBatches := (len(values) + 99) / 100
+		// 100 条一批循环推送，日志标明第几批，便于确认推送节奏
+		totalBatches := (len(missVals) + 99) / 100
 		log.Printf("同步器: 分批推送最新战报 第 %d/%d 批 成功 %d 条(本批 battle_id %s~%s)",
-			i/100+1, totalBatches, end-i, ids[i], ids[end-1])
+			i/100+1, totalBatches, end-i, missIds[i], missIds[end-1])
 	}
 	return pushed, failed, total, minBid, maxBid, failMsgs, nil
 }
 
-// ManualPushRecent 手动把本地最新 count 条战报(battle_id 倒序)强制推送到云端。
-// 不走增量游标：直接按行 INSERT OR REPLACE，用于补齐游标区间内的数据空洞。
+// ManualPushRecent 手动检查本地最新 count 条战报(battle_id 倒序)哪些云端缺失并补齐。
+// 不走增量游标：直接按行 INSERT OR REPLACE，用于补齐游标区间内的数据空洞；已存在的行跳过、只推缺失行
 func (a *App) ManualPushRecent(count int64) string {
 	if count <= 0 || count > 3000 {
 		return global.Response{Message: "推送数量需在 1~3000 之间"}.Error()
