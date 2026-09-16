@@ -17,6 +17,62 @@ import pg8000
 import streamlit as st
 
 st.set_page_config(page_title="同盟数据查询", page_icon="🗡️", layout="wide")
+# 汉化 st.dataframe 列头菜单/工具栏：经同源 iframe 在父页面注入全局 JS，动态替换英文文案
+try:
+    import streamlit.components.v1 as _components
+    _components.html(
+        """<script>
+(function () {
+  var P = window.parent;
+  if (!P || P.__stzbZHInstalled) return;
+  P.__stzbZHInstalled = 1;
+  var MAP = {
+    "Copy column name": "复制列名",
+    "Autosize": "自动调整",
+    "Sort ascending": "升序排序",
+    "Sort descending": "降序排序",
+    "Pin column": "固定列",
+    "Unpin column": "取消固定列",
+    "Hide column": "隐藏列",
+    "Statistics": "统计信息",
+    "Show/hide columns": "显示/隐藏列",
+    "Download as CSV": "下载CSV",
+    "Search": "搜索",
+    "Fullscreen": "全屏"
+  };
+  function fix(root) {
+    if (!root || (root.nodeType !== 1 && root.nodeType !== 3)) return;
+    var nodes = [];
+    if (root.nodeType === 3) nodes.push(root);
+    else {
+      var w = P.document.createTreeWalker(root, 4, null);
+      var n;
+      while ((n = w.nextNode())) nodes.push(n);
+      ["title", "aria-label", "placeholder"].forEach(function (a) {
+        var v = root.getAttribute && root.getAttribute(a);
+        if (v && MAP.hasOwnProperty(v.trim())) root.setAttribute(a, MAP[v.trim()]);
+      });
+    }
+    for (var i = 0; i < nodes.length; i++) {
+      var tt = nodes[i];
+      var v = tt.nodeValue;
+      if (v && MAP.hasOwnProperty(v.trim())) tt.nodeValue = v.replace(v.trim(), MAP[v.trim()]);
+    }
+  }
+  fix(P.document.body);
+  new MutationObserver(function (recs) {
+    for (var i = 0; i < recs.length; i++) {
+      var added = recs[i].addedNodes;
+      if (added) for (var j = 0; j < added.length; j++) fix(added[j]);
+    }
+  }).observe(P.document.body, { childList: true, subtree: true });
+  setInterval(function () { fix(P.document.body); }, 300);
+})();
+</script>""",
+        height=0,
+    )
+except Exception:
+    pass
 
 
 # 根目录 .streamlit/secrets.toml 的解析缓存(含密码，只内部使用，绝不打印)
