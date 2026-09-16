@@ -9,9 +9,10 @@ from datetime import datetime, timedelta
 import streamlit as st
 import pandas as pd
 
-st.set_page_config(page_title="同盟队伍查询", page_icon="🗡️", layout="wide")
+st.set_page_config(page_title="同盟数据查询", page_icon="🗡️", layout="wide")
 
-DB_PATH = os.environ.get("DB_PATH", os.path.join(os.path.dirname(__file__), "data.db"))
+# 本地数据库目录：默认桌面端 build/bin（每服务器一个 .db），可用环境变量覆盖
+DB_DIR = os.environ.get("DB_DIR", os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "build", "bin")))
 
 
 class TursoCursor:
@@ -107,13 +108,48 @@ class TursoConnection:
         pass
 
 
+def turso_secret(key):
+    """安全读取 st.secrets，本地未配置 secrets 文件时返回默认值"""
+    try:
+        return st.secrets.get(key, "")
+    except Exception:
+        return ""
+
+
+def list_local_dbs():
+    """列出本地数据库文件(桌面端 build/bin 下)，按修改时间倒序，最新的排在前面"""
+    try:
+        files = [f for f in os.listdir(DB_DIR) if f.endswith(".db")]
+        files.sort(key=lambda f: os.path.getmtime(os.path.join(DB_DIR, f)), reverse=True)
+        return files
+    except OSError:
+        return []
+
+
 def get_conn():
-    """云端 secrets 直连，本地 data.db 兜底"""
-    turso_url = st.secrets.get("TURSO_URL", "")
-    turso_token = st.secrets.get("TURSO_TOKEN", "")
-    if turso_url and turso_token:
-        return TursoConnection(turso_url, turso_token)
-    conn = sqlite3.connect(f"file:{DB_PATH}?mode=ro", uri=True)
+    """数据源切换：本地数据库(默认，直接读桌面端 321.db) 或 云端 Turso(同步器推送的数据)。
+    同步逻辑仍是同步器(sync.go)：桌面端把本地数据推送到 Turso，云端部署时网站从 Turso 读"""
+    src = st.session_state.get("data_source", "本地数据库")
+    if src == "云端 Turso":
+        turso_url = turso_secret("TURSO_URL")
+        turso_token = turso_secret("TURSO_TOKEN")
+        if turso_url and turso_token:
+            return TursoConnection(turso_url, turso_token)
+        st.error("云端 Turso 未配置 st.secrets(TURSO_URL/TURSO_TOKEN)，请改用本地数据库")
+        return None
+    db_name = st.session_state.get("local_db", "")
+    files = list_local_dbs()
+    if db_name not in files:
+        db_name = files[0] if files else ""
+    if not db_name:
+        st.error(f"未找到本地数据库({DB_DIR} 下无 .db 文件)")
+        return None
+    path = os.path.join(DB_DIR, db_name)
+    if not os.path.exists(path):
+        st.error(f"本地数据库不存在: {path}")
+        return None
+    # 只读方式打开，不占用写锁，桌面端同步器可继续正常写入
+    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -333,6 +369,48 @@ def format_ts(ts):
     return datetime.fromtimestamp(t).strftime("%Y-%m-%d %H:%M")
 
 
+def format_date(ts):
+    """时间戳转日期(进盟时间用)"""
+    if ts is None or ts == "":
+        return ""
+    try:
+        t = int(ts)
+    except (TypeError, ValueError):
+        return ""
+    if t <= 0:
+        return ""
+    return datetime.fromtimestamp(t).strftime("%Y-%m-%d")
+
+
+def format_pos(v):
+    """位置数字转坐标，与桌面 splitwid 一致: 1050328 -> 105,328"""
+    if v is None or v == "":
+        return ""
+    s = str(int(v))
+    last4 = s[-4:]
+    first = s[:-4] or "0"
+    return f"{first},{int(last4)}"
+
+
+def format_wu(val):
+    """武勋万位格式化，与桌面 formatWu 一致: >=10000 显示 x.x万"""
+    n = int(val or 0)
+    if n >= 10000:
+        return f"{n / 10000:.2f}万"
+    return str(n)
+
+
+def score_label(s):
+    """活跃度等级，与桌面 MemberActivity 一致"""
+    if s >= 100:
+        return "核心成员"
+    if s >= 50:
+        return "活跃成员"
+    if s >= 20:
+        return "普通成员"
+    return "不活跃"
+
+
 def safe_query(fn, *args, **kwargs):
     """查询兜底：数据库不可用/配额受限/连接异常时返回 None 并提示，不让页面红屏"""
     try:
@@ -379,44 +457,11 @@ def week_start(offset=0):
 
 @st.cache_data(ttl=600, show_spinner=False)
 def query_weekly_activity(week_offset=0, player_kw="", union_kw=""):
-    """每周活跃度：指定周的参战/翻地/周贡献，可按人名/同盟名关键词过滤"""
+    """每周活跃度(与桌面 GetWeeklyActivity 一致)：周贡献/参战/翻地/得分/24h在线，
+    可按人名/同盟名关键词过滤。单条 SQL 实现，避免逐人查询消耗云配额"""
     conn = get_conn()
     start, end = week_start(week_offset), week_start(week_offset) + 7 * 86400
-    my_union = resolve_my_union(conn)
-    p_cond = "AND t.name LIKE ?" if player_kw else ""
-    u_cond = ("AND EXISTS (SELECT 1 FROM battle_report b2 WHERE "
-              "(b2.attack_name = t.name AND b2.attack_union_name LIKE ?) "
-              "OR (b2.defend_name = t.name AND b2.defend_union_name LIKE ?))") if union_kw else ""
-    params = [start, end, start, end, start, end, my_union, start, end, start, end]
-    if player_kw:
-        params += [f"%{player_kw}%"]
-    if union_kw:
-        params += [f"%{union_kw}%"] * 2
-    sql = f"""
-    SELECT t.name, t.`group`, t.contribute_week,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name AND b.time >= ? AND b.time < ?) +
-           (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name AND r.time >= ? AND r.time < ?) AS atk_count,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name AND b.time >= ? AND b.time < ?) AS def_count,
-           (SELECT COUNT(*) FROM battle_report b
-            WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
-                    AND b.battle_desc NOT LIKE '%沃土%')
-                   OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
-              AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
-              AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)
-              AND b.time >= ? AND b.time < ?) AS land_count,
-           (SELECT MAX(time) FROM battle_report b
-            WHERE (b.attack_name = t.name OR b.defend_name = t.name) AND b.time >= ? AND b.time < ?) AS last_time
-    FROM team_user t WHERE t.name != ''
-          {p_cond}
-          {u_cond}
-    ORDER BY t.contribute_week DESC"""
-    return pd.read_sql_query(sql, conn, params=params)
-
-
-@st.cache_data(ttl=3600, show_spinner=False)
-def query_member_activity(player_kw="", union_kw=""):
-    """赛季活跃度 + 翻地次数，可按人名/同盟名关键词过滤"""
-    conn = get_conn()
+    now, cutoff = int(time.time()), int(time.time()) - 86400
     my_union = resolve_my_union(conn)
     p_cond = "AND t.name LIKE ?" if player_kw else ""
     u_cond = ("AND EXISTS (SELECT 1 FROM battle_report b2 WHERE "
@@ -428,23 +473,122 @@ def query_member_activity(player_kw="", union_kw=""):
     if union_kw:
         params += [f"%{union_kw}%"] * 2
     sql = f"""
-    SELECT t.name, t.`group`, t.wu, t.power,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name) +
-           (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name) AS atk_count,
-           (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name) AS def_count,
-           (SELECT COUNT(*) FROM battle_report b
-            WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
-                    AND b.battle_desc NOT LIKE '%沃土%')
-                   OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
-              AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
-              AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)) AS land_count,
-           (SELECT MAX(MAX(b.time), (SELECT MAX(time) FROM reports r WHERE r.attack_name = t.name))
-            FROM battle_report b WHERE b.attack_name = t.name OR b.defend_name = t.name) AS last_time
-    FROM team_user t WHERE t.name != ''
-          {p_cond}
-          {u_cond}
-    ORDER BY t.wu DESC"""
+    WITH base AS (
+        SELECT t.name, t.`group`, t.contribute_week, t.wu, t.power, t.join_time,
+               (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name AND b.time >= {start} AND b.time < {end}) +
+               (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name AND r.time >= {start} AND r.time < {end}) AS atk_count,
+               (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name AND b.time >= {start} AND b.time < {end}) AS def_count,
+               (SELECT COUNT(*) FROM battle_report b
+                WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
+                        AND b.battle_desc NOT LIKE '%沃土%')
+                       OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
+                  AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
+                  AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)
+                  AND b.time >= {start} AND b.time < {end}) AS land_count,
+               (SELECT MAX(MAX(b.time), (SELECT MAX(r2.time) FROM reports r2
+                                         WHERE r2.attack_name = t.name AND r2.time >= {start} AND r2.time < {end}))
+                FROM battle_report b
+                WHERE (b.attack_name = t.name OR b.defend_name = t.name)
+                  AND b.time >= {start} AND b.time < {end}) AS last_time
+        FROM team_user t WHERE t.name != ''
+        {p_cond} {u_cond}
+    )
+    SELECT b.name, b.`group`, b.contribute_week, b.wu, b.power,
+           b.atk_count, b.def_count, b.atk_count + b.def_count AS total_bat, b.land_count, b.last_time,
+           CASE WHEN b.join_time > 0 THEN MAX(1, ({now} - b.join_time) / 86400) ELSE 0 END AS join_days,
+           CASE WHEN b.last_time IS NOT NULL AND b.last_time >= {cutoff} THEN 1 ELSE 0 END AS active_24h,
+           ROUND(b.atk_count * 0.4 + b.def_count * 0.4 + b.wu / 1000.0 * 0.3
+                 + CASE WHEN b.last_time IS NOT NULL AND b.last_time >= {cutoff} THEN 20 ELSE 0 END
+                 + CASE WHEN b.join_time > 0 THEN (b.atk_count + b.def_count) * 1.0 / MAX(1, ({now} - b.join_time) / 86400) * 5.0 ELSE 0 END, 2) AS score
+    FROM base b
+    ORDER BY b.contribute_week DESC, score DESC"""
     return pd.read_sql_query(sql, conn, params=params)
+
+
+@st.cache_data(ttl=3600, show_spinner=False)
+def query_member_activity(player_kw="", union_kw=""):
+    """赛季总活跃度(与桌面 GetMemberActivity 一致)：武勋/势力/参战/翻地/得分/24h在线，
+    可按人名/同盟名关键词过滤。单条 SQL 实现"""
+    conn = get_conn()
+    now, cutoff = int(time.time()), int(time.time()) - 86400
+    my_union = resolve_my_union(conn)
+    p_cond = "AND t.name LIKE ?" if player_kw else ""
+    u_cond = ("AND EXISTS (SELECT 1 FROM battle_report b2 WHERE "
+              "(b2.attack_name = t.name AND b2.attack_union_name LIKE ?) "
+              "OR (b2.defend_name = t.name AND b2.defend_union_name LIKE ?))") if union_kw else ""
+    params = [my_union]
+    if player_kw:
+        params += [f"%{player_kw}%"]
+    if union_kw:
+        params += [f"%{union_kw}%"] * 2
+    sql = f"""
+    WITH base AS (
+        SELECT t.name, t.`group`, t.wu, t.power, t.join_time,
+               (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name) +
+               (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name) AS atk_count,
+               (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name) AS def_count,
+               (SELECT COUNT(*) FROM battle_report b
+                WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
+                        AND b.battle_desc NOT LIKE '%沃土%')
+                       OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
+                  AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
+                  AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)) AS land_count,
+               (SELECT MAX(MAX(b.time), (SELECT MAX(r2.time) FROM reports r2 WHERE r2.attack_name = t.name))
+                FROM battle_report b WHERE b.attack_name = t.name OR b.defend_name = t.name) AS last_time
+        FROM team_user t WHERE t.name != ''
+        {p_cond} {u_cond}
+    )
+    SELECT b.name, b.`group`, b.wu, b.power,
+           b.atk_count, b.def_count, b.atk_count + b.def_count AS total_bat, b.land_count, b.last_time,
+           CASE WHEN b.join_time > 0 THEN MAX(1, ({now} - b.join_time) / 86400) ELSE 0 END AS join_days,
+           CASE WHEN b.last_time IS NOT NULL AND b.last_time >= {cutoff} THEN 1 ELSE 0 END AS active_24h,
+           ROUND(b.atk_count * 0.4 + b.def_count * 0.4 + b.wu / 1000.0 * 0.3
+                 + CASE WHEN b.last_time IS NOT NULL AND b.last_time >= {cutoff} THEN 20 ELSE 0 END
+                 + CASE WHEN b.join_time > 0 THEN (b.atk_count + b.def_count) * 1.0 / MAX(1, ({now} - b.join_time) / 86400) * 5.0 ELSE 0 END, 2) AS score
+    FROM base b
+    ORDER BY score DESC"""
+    return pd.read_sql_query(sql, conn, params=params)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def query_groups():
+    """所有分组名(去重排序)"""
+    conn = get_conn()
+    df = pd.read_sql_query("SELECT DISTINCT `group` FROM team_user WHERE name != '' ORDER BY `group`", conn)
+    return df["group"].tolist() if df is not None and len(df) else []
+
+
+@st.cache_data(ttl=30, show_spinner=False)
+def query_members(groups=(), kw=""):
+    """同盟成员(与桌面 TeamUser 一致)，可按分组多选/人名关键词过滤"""
+    conn = get_conn()
+    sql = ("SELECT id, name, `group`, power, wu, contribute_total, contribute_week, pos, join_time "
+           "FROM team_user WHERE name != ''")
+    params = []
+    if groups:
+        sql += " AND `group` IN (" + ",".join("?" for _ in groups) + ")"
+        params += list(groups)
+    if kw:
+        sql += " AND name LIKE ?"
+        params += [f"%{kw}%"]
+    sql += " ORDER BY `group`, id"
+    return pd.read_sql_query(sql, conn, params=params)
+
+
+@st.cache_data(ttl=60, show_spinner=False)
+def query_group_wu():
+    """分组武勋(与桌面 GetGroupWu 一致)：分组/人数/总武勋/平均武勋/零武勋人数，按总武勋降序"""
+    conn = get_conn()
+    sql = """
+    SELECT t.`group`, COUNT(*) AS member_count, SUM(t.wu) AS total_wu,
+           ROUND(AVG(t.wu)) AS average_wu, IFNULL(s.zero_wu_count, 0) AS zero_wu_count
+    FROM team_user t
+    LEFT JOIN (SELECT `group`, COUNT(*) AS zero_wu_count FROM team_user WHERE wu = 0 GROUP BY `group`) s
+           ON s.`group` = t.`group`
+    WHERE t.name != ''
+    GROUP BY t.`group`
+    ORDER BY total_wu DESC"""
+    return pd.read_sql_query(sql, conn)
 
 
 @st.cache_data(ttl=600, show_spinner=False)
@@ -508,9 +652,28 @@ def query_teams(player_kw="", union_kw=""):
 
 st.sidebar.title("🗡️ 同盟数据查询")
 with st.sidebar.container():
+    _src = st.sidebar.radio("数据来源", ["本地数据库", "云端 Turso"], key="data_source", horizontal=True)
+    if _src == "本地数据库":
+        _db_files = list_local_dbs()
+        if _db_files:
+            _cur = st.session_state.get("local_db", "")
+            if _cur not in _db_files:
+                _cur = _db_files[0]
+            st.sidebar.selectbox("数据库文件", _db_files, key="local_db", index=_db_files.index(_cur))
+            st.sidebar.caption(f"目录: {DB_DIR}")
+        else:
+            st.sidebar.warning(f"{DB_DIR} 下没有 .db 文件")
+    else:
+        if not turso_secret("TURSO_URL") or not turso_secret("TURSO_TOKEN"):
+            st.sidebar.warning("未配置云端 Turso secrets，将无法连接")
+    # 数据源/数据库变化时清空查询缓存，避免展示旧数据
+    _sig = (st.session_state.get("data_source"), st.session_state.get("local_db"))
+    if st.session_state.get("_data_sig") != _sig:
+        st.cache_data.clear()
+        st.session_state["_data_sig"] = _sig
     _latest = safe_query(latest_data_time)
     st.sidebar.caption(f"📅 最新数据: {format_ts(_latest) if _latest is not None else '未知'}")
-page = st.sidebar.radio("功能", ["队伍查询", "成员活跃度"])
+page = st.sidebar.radio("功能", ["队伍查询", "同盟成员", "分组武勋", "活跃度分析"], key="page")
 
 def kw_inputs(page_key):
     p = st.text_input("人名关键字", key=f"pkw_{page_key}")
@@ -563,8 +726,48 @@ if page == "队伍查询":
             for g in parse_gears(r["gear_info"], r["role"])), axis=1)
         st.download_button("导出 CSV", csv.to_csv(index=False).encode("utf-8-sig"), "teams.csv")
 
-elif page == "成员活跃度":
-    st.title("🗡️ 成员活跃度")
+elif page == "同盟成员":
+    st.title("🗡️ 同盟成员")
+    groups = safe_query(query_groups) or []
+    sel_groups = st.multiselect("按分组筛选(不选=全部)", groups, key="mem_groups")
+    kw = st.text_input("搜索成员名字", key="mem_kw")
+    if st.button("查询", type="primary"):
+        st.session_state["mem_df"] = safe_query(query_members, tuple(sel_groups), kw.strip())
+
+    if "mem_df" in st.session_state and st.session_state["mem_df"] is not None and len(st.session_state["mem_df"]):
+        df = st.session_state["mem_df"]
+        st.success(f"共 {len(df)} 名成员")
+        disp = df.copy()
+        disp["位置"] = disp["pos"].apply(format_pos)
+        disp["进盟时间"] = disp["join_time"].apply(format_date)
+        st.dataframe(disp[["name", "group", "power", "wu", "contribute_total", "contribute_week", "位置", "进盟时间"]].rename(
+            columns={"name": "名字", "group": "分组", "power": "势力", "wu": "周武勋",
+                     "contribute_total": "总贡献", "contribute_week": "周贡献"}),
+            width="stretch", hide_index=True)
+        st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "members.csv")
+
+elif page == "分组武勋":
+    st.title("🗡️ 分组武勋")
+    df = safe_query(query_group_wu)
+    if df is not None and len(df):
+        total_members = int(df["member_count"].sum())
+        total_wu = int(df["total_wu"].sum())
+        avg_wu = round(total_wu / len(df)) if len(df) else 0
+        c1, c2, c3 = st.columns(3)
+        c1.metric("成员总数", total_members)
+        c2.metric("总武勋", format_wu(total_wu))
+        c3.metric("平均武勋", format_wu(avg_wu))
+        chart = df.sort_values("total_wu")
+        st.bar_chart(chart.set_index("group")["total_wu"])
+        disp = df.copy()
+        st.dataframe(disp[["group", "member_count", "total_wu", "average_wu", "zero_wu_count"]].rename(
+            columns={"group": "分组", "member_count": "人数", "total_wu": "总武勋",
+                     "average_wu": "平均武勋", "zero_wu_count": "0武勋人数"}),
+            width="stretch", hide_index=True)
+        st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "group_wu.csv")
+
+elif page == "活跃度分析":
+    st.title("🗡️ 活跃度分析")
     mode = st.radio("面板", ["每周活跃度", "赛季总活跃度"], key="act_mode", horizontal=True)
     if mode == "每周活跃度":
         week_opt = st.radio("选择周", ["本周", "上周", "前两周"], key="act_week", horizontal=True)
@@ -587,16 +790,20 @@ elif page == "成员活跃度":
         df = st.session_state["act_df"]
         st.success(f"共 {len(df)} 名成员")
         disp = df.copy()
-        disp["最近参战"] = disp["last_time"].apply(format_ts)
+        disp["最近参战"] = disp["last_time"].apply(lambda v: format_ts(v) or "从未参战")
+        disp["24h在线"] = disp["active_24h"].apply(lambda v: "✅ 在线" if v == 1 else "离线")
+        disp["活跃等级"] = disp["score"].apply(score_label)
         if st.session_state.get("act_mode_cur") == "每周活跃度":
-            st.dataframe(disp[["name", "group", "contribute_week", "atk_count", "def_count", "land_count", "最近参战"]].rename(
+            st.dataframe(disp[["name", "group", "contribute_week", "atk_count", "def_count", "total_bat", "land_count", "最近参战", "24h在线", "score", "活跃等级"]].rename(
                 columns={"name": "成员", "group": "分组", "contribute_week": "周贡献",
-                         "atk_count": "进攻场次", "def_count": "防守场次", "land_count": "翻地次数"}),
-                use_container_width=True, hide_index=True)
+                         "atk_count": "进攻场次", "def_count": "防守场次", "total_bat": "总场次",
+                         "land_count": "翻地次数", "score": "活跃度"}),
+                width="stretch", hide_index=True)
             st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "weekly_activity.csv")
         else:
-            st.dataframe(disp[["name", "group", "wu", "power", "atk_count", "def_count", "land_count", "最近参战"]].rename(
+            st.dataframe(disp[["name", "group", "wu", "power", "atk_count", "def_count", "total_bat", "land_count", "join_days", "最近参战", "24h在线", "score", "活跃等级"]].rename(
                 columns={"name": "成员", "group": "分组", "wu": "武勋", "power": "势力",
-                         "atk_count": "进攻场次", "def_count": "防守场次", "land_count": "翻地次数"}),
-                use_container_width=True, hide_index=True)
+                         "atk_count": "进攻场次", "def_count": "防守场次", "total_bat": "总场次",
+                         "land_count": "翻地次数", "join_days": "加入天数", "score": "活跃度"}),
+                width="stretch", hide_index=True)
             st.download_button("导出 CSV", df.to_csv(index=False).encode("utf-8-sig"), "season_activity.csv")
