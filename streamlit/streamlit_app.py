@@ -58,20 +58,26 @@ def _lit(v):
 
 
 def get_conn():
-    """固定云端数据源：Supabase(PostgreSQL，经 Supavisor 连接池)。应用端同步器(sync.go)推送数据，本网站只读。
+    """固定云端数据源：Supabase(PostgreSQL，经 Supavisor IPv4 连接池)。
+    注意：Supabase 直连域名 db.<project_ref>.supabase.co 只有 IPv6(AAAA) 记录，无 IPv6 出网的网络连不上，
+    故统一走连接池 aws-0-ap-northeast-1.pooler.supabase.com(IPv4)，用户名格式为 <user>.<project_ref>。
     连接参数在 .streamlit/secrets.toml：SUPA_HOST/SUPA_USER/SUPA_PASSWORD/SUPA_PORT/SUPA_DB。未配置时返回 None 并提示
-    证书不做 CA 校验(仅加密)，与 pgx sslmode=require 一致：Supabase 直连端口证书链含自签，校验会失败"""
-    host = supabase_secret("SUPA_HOST")
+    证书不做 CA 校验(仅加密)，与 pgx sslmode=require 一致：Supabase 证书链含自签，校验会失败"""
+    host_cfg = supabase_secret("SUPA_HOST")
     user = supabase_secret("SUPA_USER")
     password = supabase_secret("SUPA_PASSWORD")
-    port = supabase_secret("SUPA_PORT") or "6543"
+    port = supabase_secret("SUPA_PORT") or "5432"
     db = supabase_secret("SUPA_DB") or "postgres"
-    if not host or not user or not password:
+    if not host_cfg or not user or not password:
         st.error("Supabase 未配置：请在 .streamlit/secrets.toml 设置 SUPA_HOST/SUPA_USER/SUPA_PASSWORD（与应用端 supabase.json 同源）")
         return None
+    m = re.search(r"db\.([a-z0-9]+)\.supabase\.co", host_cfg)
+    ref = m.group(1) if m else ""
+    pooler_host = "aws-0-ap-northeast-1.pooler.supabase.com"
+    conn_user = f"{user}.{ref}" if ref else user
     try:
-        return pg8000.connect(host=host, user=user, password=password, database=db,
-                              port=int(port),
+        return pg8000.connect(host=pooler_host, user=conn_user, password=password,
+                              database=db, port=int(port),
                               ssl_context=ssl._create_unverified_context())
     except Exception as e:
         st.error(f"Supabase 连接失败: {e}")
