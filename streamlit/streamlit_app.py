@@ -7,6 +7,11 @@ import ssl
 import time
 from datetime import datetime, timedelta
 
+try:
+    import tomllib
+except ImportError:  # Python < 3.11
+    tomllib = None
+
 import pandas as pd
 import pg8000
 import streamlit as st
@@ -14,12 +19,37 @@ import streamlit as st
 st.set_page_config(page_title="同盟数据查询", page_icon="🗡️", layout="wide")
 
 
+# 根目录 .streamlit/secrets.toml 的解析缓存(含密码，只内部使用，绝不打印)
+_ROOT_SECRETS = None
+
+
+def _root_secrets():
+    """st.secrets 读不到配置时的回退：从仓库根目录读取 .streamlit/secrets.toml。
+    当从 streamlit/ 目录启动(如 `cd streamlit && streamlit run streamlit_app.py`)时，st.secrets
+    只在启动目录下找 .streamlit/，会漏掉根目录配置，这里补上"""
+    global _ROOT_SECRETS
+    if _ROOT_SECRETS is None:
+        if tomllib is None:
+            _ROOT_SECRETS = {}
+        else:
+            try:
+                base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+                with open(os.path.join(base, ".streamlit", "secrets.toml"), "rb") as f:
+                    _ROOT_SECRETS = tomllib.load(f)
+            except Exception:
+                _ROOT_SECRETS = {}
+    return _ROOT_SECRETS
+
+
 def supabase_secret(key):
-    """安全读取 st.secrets，本地未配置 secrets 文件时返回默认值"""
+    """安全读取 st.secrets；无值或未配置时回退读取仓库根目录 .streamlit/secrets.toml，未配置返回默认值"""
     try:
-        return st.secrets.get(key, "")
+        v = st.secrets.get(key, "")
     except Exception:
-        return ""
+        v = ""
+    if not v:
+        v = str(_root_secrets().get(key, "") or "")
+    return v
 
 
 def _lit(v):
@@ -71,7 +101,7 @@ def data_fingerprint(alliance=""):
     cond = f" AND alliance = {_lit(alliance)}" if alliance else ""
     try:
         try:
-            row = conn.execute(
+            row = conn.cursor().execute(
                 f"""SELECT (SELECT COUNT(*) FROM team_user WHERE name != ''{cond}),
                           (SELECT COALESCE(MAX(id), 0) FROM team_user WHERE 1 = 1{cond}),
                           (SELECT COALESCE(MAX(battle_id), 0) FROM battle_report WHERE 1 = 1{cond}),
@@ -371,7 +401,7 @@ def resolve_my_union(alliance="", conn=None):
         else:
             try:
                 cond = f" AND alliance = {_lit(alliance)}" if alliance else ""
-                row = own.execute(
+                row = own.cursor().execute(
                     f"""SELECT attack_union_name FROM battle_report
                     WHERE attack_name IN (SELECT name FROM team_user WHERE name != ''{cond})
                     AND attack_union_name != '' AND attack_union_name != defend_union_name{cond}
@@ -422,7 +452,7 @@ def latest_data_time(alliance=""):
         return None
     cond = f" WHERE alliance = {_lit(alliance)}" if alliance else ""
     try:
-        row = conn.execute(f"SELECT MAX(time) FROM battle_report{cond}").fetchone()
+        row = conn.cursor().execute(f"SELECT MAX(time) FROM battle_report{cond}").fetchone()
     finally:
         try:
             conn.close()
