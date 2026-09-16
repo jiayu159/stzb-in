@@ -4,8 +4,11 @@ build/
 !build/bin/stzbHelper-wails.exe
 frontend/dist/
 
-# 云同步凭据(嵌入 exe 编译，禁止提交)
+# 云同步凭据(应用端/网站配置文件均含数据库密码，禁止提交)
 /turso.json
+/supabase.json
+/build/bin/supabase.json
+.streamlit/secrets.toml
 
 # 依赖
 node_modules/
@@ -20,6 +23,9 @@ directfetch_cache.json
 EXPERIMENTS.md
 fetch_debug.log
 *.log
+
+# Python 缓存
+__pycache__/
 
 # 系统文件
 Thumbs.db

@@ -1,51 +1,35 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onUnmounted } from 'vue'
 import { NCard, NButton, NStatistic, NGrid, NGi, NTag, NSpace, NSpin, NInputNumber } from 'naive-ui'
-import { GetTaskList, GetTeamUser, GetVersion, GetSyncStatus, ManualSync, ManualPushRecent } from '../../wailsjs/go/main/App'
-import { Activity, Trophy, Shield, Crosshair, List, Bot, CloudUpload, RefreshCw, Send } from 'lucide-vue-next'
+import { GetTaskList, GetTeamUser, GetVersion, GetSyncStatus, ManualPushRecent } from '../../wailsjs/go/main/App'
+import { Activity, Trophy, Shield, Crosshair, List, Bot, RefreshCw, Send } from 'lucide-vue-next'
 
 const taskCount = ref(0)
 const memberCount = ref(0)
 const version = ref('')
 const syncEnabled = ref(false)
+const syncAlliance = ref('')
+const syncConfigOk = ref(false)
+const syncWaitingDb = ref(false)
 const syncLastRun = ref(0)
 const syncLastErr = ref('')
-const syncing = ref(false)
-const syncMsg = ref('')
 const pushCount = ref(3000)
 const pushingRecent = ref(false)
 const pushRecentMsg = ref('')
+let statusTimer = null
 
 function loadSyncStatus() {
     GetSyncStatus().then(v => {
         let resp = JSON.parse(v)
         if (resp.code == 200 && resp.data) {
             syncEnabled.value = resp.data.enabled
+            syncConfigOk.value = !!resp.data.config_ok
+            syncWaitingDb.value = !!resp.data.waiting_db
+            syncAlliance.value = resp.data.alliance || ''
             syncLastRun.value = resp.data.last_run || 0
             syncLastErr.value = resp.data.last_err || ''
         }
     }).catch(() => {})
-}
-
-function pushToCloud() {
-    syncing.value = true
-    syncMsg.value = ''
-    ManualSync().then(v => {
-        let resp = JSON.parse(v)
-        if (resp.code == 200) {
-            syncMsg.value = '推送完成，数据已同步到云端'
-            if (resp.data && resp.data.last_run) {
-                syncLastRun.value = resp.data.last_run
-            }
-        } else {
-            syncMsg.value = resp.msg || '推送失败'
-        }
-    }).catch(() => {
-        syncMsg.value = '调用失败，请查看运行日志'
-    }).finally(() => {
-        syncing.value = false
-        loadSyncStatus()
-    })
 }
 
 function pushRecentToCloud() {
@@ -92,6 +76,13 @@ onMounted(() => {
     }).catch(() => {})
 
     loadSyncStatus()
+    // 云同步状态随后台初始化/数据库打开动态变化(如等待数据库打开后自动启用)，
+    // 轮询刷新，避免首次加载时拿到"未启用"后不再更新
+    statusTimer = setInterval(loadSyncStatus, 3000)
+})
+
+onUnmounted(() => {
+    if (statusTimer) clearInterval(statusTimer)
 })
 </script>
 
@@ -108,27 +99,25 @@ onMounted(() => {
             <div class="sync-bar">
                 <div class="sync-info">
                     <span class="sync-title">云端数据同步</span>
-                    <n-tag v-if="syncEnabled" :bordered="false" type="success" size="small">已启用</n-tag>
+                    <n-tag v-if="!syncConfigOk" :bordered="false" type="warning" size="small">未启用</n-tag>
+                    <n-tag v-else-if="syncWaitingDb" :bordered="false" type="info" size="small">等待数据库打开（配置就绪）</n-tag>
+                    <n-tag v-else-if="syncEnabled" :bordered="false" type="success" size="small">已启用</n-tag>
                     <n-tag v-else :bordered="false" type="warning" size="small">未启用</n-tag>
+                    <span v-if="syncEnabled && syncAlliance" class="sync-meta">联盟: {{ syncAlliance }}</span>
                     <span v-if="syncLastRun" class="sync-meta">上次同步 {{ new Date(syncLastRun * 1000).toLocaleString() }}</span>
                     <span v-if="syncLastErr" class="sync-err">上次失败: {{ syncLastErr }}</span>
                 </div>
-                <n-button type="primary" :loading="syncing" @click="pushToCloud">
-                    <template #icon><CloudUpload :size="16" /></template>
-                    手动推送数据到云端
-                </n-button>
             </div>
             <div class="sync-row">
-                <span class="sync-row-label">推送最新战报</span>
+                <span class="sync-row-label">手动推送最新战报</span>
                 <n-input-number v-model:value="pushCount" :min="1" :max="3000" :step="100"
                     :style="{ width: '140px' }" />
                 <span class="sync-row-tip">条（按 battle_id 倒序取本地最新，强制覆盖云端，用于补齐漏掉的数据）</span>
-                <n-button secondary type="info" :loading="pushingRecent" @click="pushRecentToCloud">
+                <n-button type="primary" :loading="pushingRecent" @click="pushRecentToCloud">
                     <template #icon><Send :size="16" /></template>
                     推送最新 {{ pushCount || 0 }} 条
                 </n-button>
             </div>
-            <div v-if="syncMsg" class="sync-msg">{{ syncMsg }}</div>
             <div v-if="pushRecentMsg" class="sync-msg">{{ pushRecentMsg }}</div>
         </n-card>
 
