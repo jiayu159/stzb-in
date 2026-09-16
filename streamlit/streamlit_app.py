@@ -608,19 +608,20 @@ def query_members(alliance=""):
 
 @st.cache_data(show_spinner=False)
 def query_group_wu(alliance=""):
-    """分组武勋(与桌面 GetGroupWu 一致)：分组/人数/总武勋/平均武勋/零武勋人数，按总武勋降序"""
-    conn = get_conn()
-    cond = f" AND alliance = {_lit(alliance)}" if alliance else ""
-    sql = f"""
-    SELECT t."group", COUNT(*) AS member_count, SUM(t.wu) AS total_wu,
-           ROUND(AVG(t.wu)) AS average_wu, COALESCE(s.zero_wu_count, 0) AS zero_wu_count
-    FROM team_user t
-    LEFT JOIN (SELECT "group", COUNT(*) AS zero_wu_count FROM team_user WHERE wu = 0{cond} GROUP BY "group") s
-           ON s."group" = t."group"
-    WHERE t.name != ''{cond}
-    GROUP BY t."group"
-    ORDER BY total_wu DESC"""
-    return _read_sql(sql)
+    """分组武勋(与桌面 GetGroupWu 一致)：直接基于同盟成员数据(team_user)分组计算，
+    分组/人数/总武勋/平均武勋/零武勋人数，按总武勋降序"""
+    df = query_members(alliance)
+    if df is None or not len(df):
+        return df
+    df = df.copy()
+    df["wu"] = df["wu"].apply(_to_int)
+    grouped = df.groupby("group", dropna=False).agg(
+        member_count=("name", "count"),
+        total_wu=("wu", "sum"),
+        zero_wu_count=("wu", lambda s: int((s == 0).sum())),
+    ).reset_index()
+    grouped["average_wu"] = (grouped["total_wu"] / grouped["member_count"]).round(0).astype(int)
+    return grouped.sort_values("total_wu", ascending=False).reset_index(drop=True)
 
 
 @st.cache_data(show_spinner=False)
