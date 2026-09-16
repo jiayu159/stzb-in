@@ -1,4 +1,3 @@
-import sqlite3
 import os
 import json
 import re
@@ -10,9 +9,6 @@ import streamlit as st
 import pandas as pd
 
 st.set_page_config(page_title="同盟数据查询", page_icon="🗡️", layout="wide")
-
-# 本地数据库目录：默认桌面端 build/bin（每服务器一个 .db），可用环境变量覆盖
-DB_DIR = os.environ.get("DB_DIR", os.path.normpath(os.path.join(os.path.dirname(__file__), "..", "build", "bin")))
 
 
 class TursoCursor:
@@ -116,76 +112,44 @@ def turso_secret(key):
         return ""
 
 
-def list_local_dbs():
-    """列出本地数据库文件(桌面端 build/bin 下)，按修改时间倒序，最新的排在前面"""
-    try:
-        files = [f for f in os.listdir(DB_DIR) if f.endswith(".db")]
-        files.sort(key=lambda f: os.path.getmtime(os.path.join(DB_DIR, f)), reverse=True)
-        return files
-    except OSError:
-        return []
-
-
 def get_conn():
-    """数据源切换：本地数据库(默认，只读直连桌面端应用同步数据的 321.db) 或 云端 Turso(同步器推送的数据)。
-    同步逻辑仍是同步器(sync.go)：桌面端把本地数据推送到 Turso，云端部署时网站从 Turso 读。
-    注：本地数据库就是应用端(桌面端)同步数据所用的库，因此本机运行时网站可直接读它"""
-    src = st.session_state.get("data_source", "本地数据库")
-    if src == "云端 Turso":
-        turso_url = turso_secret("TURSO_URL")
-        turso_token = turso_secret("TURSO_TOKEN")
-        if turso_url and turso_token:
-            return TursoConnection(turso_url, turso_token)
-        st.error("云端 Turso 未配置 st.secrets(TURSO_URL/TURSO_TOKEN)，请改用本地库")
-        return None
-    db_name = st.session_state.get("local_db", "")
-    files = list_local_dbs()
-    if db_name not in files:
-        db_name = files[0] if files else ""
-    if not db_name:
-        st.error(f"未找到本地数据库({DB_DIR} 下无 .db 文件)")
-        return None
-    path = os.path.join(DB_DIR, db_name)
-    if not os.path.exists(path):
-        st.error(f"本地数据库不存在: {path}")
-        return None
-    # 只读方式打开，不占用写锁，桌面端应用(同步器)可继续正常写入
-    conn = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """固定云端数据源：应用端同步器(sync.go)把本地数据推送到 Turso，本网站只从 Turso 读"""
+    turso_url = turso_secret("TURSO_URL")
+    turso_token = turso_secret("TURSO_TOKEN")
+    if turso_url and turso_token:
+        return TursoConnection(turso_url, turso_token)
+    st.error("云端 Turso 未配置：请在 .streamlit/secrets.toml 设置 TURSO_URL/TURSO_TOKEN（与应用端 turso.json 同源）")
+    return None
 
 
 def data_fingerprint():
-    """数据源指纹(轻量)：数据源/库 + 关键表行数与最新时间戳。
-    用于判断数据是否有变动——数据无变动时直接复用缓存，不重复读云端"""
-    src = st.session_state.get("data_source", "本地数据库")
-    db_name = st.session_state.get("local_db", "")
+    """云端数据指纹(轻量)：关键表行数与最新时间戳。只查标量聚合，读量极小；
+    用于判断数据是否变动——无变动时直接复用缓存，不重复读云端"""
     conn = get_conn()
     if conn is None:
         return None
     try:
         row = conn.execute(
             """SELECT (SELECT COUNT(*) FROM team_user WHERE name != ''),
-                      (SELECT IFNULL(MAX(join_time), 0) FROM team_user),
-                      (SELECT COUNT(*) FROM battle_report),
+                      (SELECT IFNULL(MAX(id), 0) FROM team_user),
+                      (SELECT IFNULL(MAX(battle_id), 0) FROM battle_report),
                       (SELECT IFNULL(MAX(time), 0) FROM battle_report),
-                      (SELECT COUNT(*) FROM reports),
-                      (SELECT IFNULL(MAX(time), 0) FROM reports)"""
+                      (SELECT IFNULL(MAX(battle_id), 0) FROM reports)"""
         ).fetchone()
     except Exception:
         return None
-    finally:
-        conn.close()
-    return (src, db_name) + tuple(row)
+    return tuple(row)
 
 
 def maybe_refresh_cache():
     """每次切换界面时轻量检查数据是否有更新：指纹变化才清缓存重读，无变动则复用缓存"""
+    global _resolve_my_union
     fp = data_fingerprint()
     if fp is None:
         return
     if st.session_state.get("_fp") != fp:
         st.cache_data.clear()
+        _resolve_my_union = None
         st.session_state["_fp"] = fp
 
 
@@ -444,14 +408,48 @@ def rate_limited(seconds=3):
     return True
 
 
+# resolve_my_union 结果稳定(本盟盟名)，缓存到 session 并在指纹变化时重建，避免重复全表扫
+_resolve_my_union = None
+
+
 def resolve_my_union(conn):
-    row = conn.execute(
-        """SELECT attack_union_name FROM battle_report
-        WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
-        AND attack_union_name != '' AND attack_union_name != defend_union_name
-        GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1"""
-    ).fetchone()
-    return row[0] if row else ""
+    global _resolve_my_union
+    if _resolve_my_union is None:
+        row = conn.execute(
+            """SELECT attack_union_name FROM battle_report
+            WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
+            AND attack_union_name != '' AND attack_union_name != defend_union_name
+            GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1"""
+        ).fetchone()
+        _resolve_my_union = row[0] if row else ""
+    return _resolve_my_union
+
+
+def _to_int(v):
+    """Turso 值安全转 int：None/NaN/''/非法值一律返回 0"""
+    if v is None:
+        return 0
+    if isinstance(v, float) and v != v:  # NaN
+        return 0
+    try:
+        i = int(v)
+    except (TypeError, ValueError):
+        return 0
+    return i
+
+
+def _coerce_numeric(df, cols=None):
+    """Turso HTTP 返回值全是字符串、NULL 经 pandas 变 NaN；统一转 int 再算分/排序，避免 int(nan) 崩溃"""
+    if df is None or not len(df):
+        return df
+    df = df.copy()
+    numeric_cols = cols or ["id", "power", "wu", "contribute_total", "contribute_week",
+                            "pos", "join_time", "atk_count", "def_count", "total_bat",
+                            "land_count", "last_time"]
+    for c in numeric_cols:
+        if c in df.columns:
+            df[c] = df[c].apply(_to_int)
+    return df
 
 
 @st.cache_data(show_spinner=False)
@@ -459,7 +457,16 @@ def latest_data_time():
     """最新战报时间(侧边栏展示)"""
     conn = get_conn()
     row = conn.execute("SELECT MAX(time) FROM battle_report").fetchone()
-    return row[0] if row else None
+    v = row[0] if row else None
+    if v is None:
+        return None
+    try:
+        i = int(v)
+    except (TypeError, ValueError):
+        return None
+    if isinstance(v, float) and v != v:  # NaN -> None(未知)
+        return None
+    return i
 
 
 def week_start(offset=0):
@@ -472,84 +479,111 @@ def week_start(offset=0):
 @st.cache_data(show_spinner=False)
 def query_weekly_activity(week_offset=0):
     """每周活跃度(与桌面 GetWeeklyActivity 一致)：选定周内的参战/翻地/周贡献等原始统计。
+    改为服务端一次性 GROUP BY 聚合返回(4 次整表读换 1 次小结果集)，避免逐成员嵌套子查询反复全表扫烧云额度。
     只缓存原始统计，join_days/24h在线/活跃度得分由页面层按当前时间实时计算"""
     conn = get_conn()
     start, end = week_start(week_offset), week_start(week_offset) + 7 * 86400
     my_union = resolve_my_union(conn)
+    mu_lit = "''" if not my_union else "'" + str(my_union).replace("'", "''") + "'"
     sql = f"""
-    WITH base AS (
-        SELECT t.name, t.`group`, t.contribute_week, t.wu, t.power, t.join_time,
-               (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name AND b.time >= {start} AND b.time < {end}) +
-               (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name AND r.time >= {start} AND r.time < {end}) AS atk_count,
-               (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name AND b.time >= {start} AND b.time < {end}) AS def_count,
-               (SELECT COUNT(*) FROM battle_report b
-                WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
-                        AND b.battle_desc NOT LIKE '%沃土%')
-                       OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
-                  AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
-                  AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)
-                  AND b.time >= {start} AND b.time < {end}) AS land_count,
-               (SELECT MAX(MAX(b.time), (SELECT MAX(r2.time) FROM reports r2
-                                         WHERE r2.attack_name = t.name AND r2.time >= {start} AND r2.time < {end}))
-                FROM battle_report b
-                WHERE (b.attack_name = t.name OR b.defend_name = t.name)
-                  AND b.time >= {start} AND b.time < {end}) AS last_time
-        FROM team_user t WHERE t.name != ''
+    WITH stats AS (
+        SELECT name,
+               SUM(atk) AS atk_count, SUM(def) AS def_count,
+               SUM(land) AS land_count, MAX(last_time) AS last_time
+        FROM (
+            SELECT attack_name AS name, 1 AS atk, 0 AS def, 0 AS land, time AS last_time
+            FROM battle_report WHERE time >= {start} AND time < {end}
+            UNION ALL
+            SELECT defend_name AS name, 0 AS atk, 1 AS def, 0 AS land, time AS last_time
+            FROM battle_report WHERE time >= {start} AND time < {end}
+            UNION ALL
+            SELECT attack_name AS name, 0 AS atk, 0 AS def, 1 AS land, 0 AS last_time
+            FROM battle_report
+            WHERE ((battle_desc != '' AND (battle_desc LIKE '%占领了%' OR battle_desc LIKE '%拆除%')
+                    AND battle_desc NOT LIKE '%沃土%')
+                   OR (battle_desc = '' AND wid_name LIKE '土地%' AND wid_name NOT LIKE '%沃土%'))
+              AND defend_union_name != '' AND defend_union_name != {mu_lit}
+              AND npc = 0 AND result IN (1,2,3,4,10,18,19)
+              AND time >= {start} AND time < {end}
+            UNION ALL
+            SELECT attack_name AS name, 1 AS atk, 0 AS def, 0 AS land, time AS last_time
+            FROM reports WHERE time >= {start} AND time < {end}
+        )
+        GROUP BY name
     )
-    SELECT b.name, b.`group`, b.contribute_week, b.wu, b.power, b.join_time,
-           b.atk_count, b.def_count, b.atk_count + b.def_count AS total_bat, b.land_count, b.last_time
-    FROM base b
-    ORDER BY b.contribute_week DESC"""
-    return pd.read_sql_query(sql, conn, params=[my_union])
+    SELECT t.name, t.`group`, t.contribute_week, t.wu, t.power, t.join_time,
+           IFNULL(s.atk_count, 0) AS atk_count, IFNULL(s.def_count, 0) AS def_count,
+           IFNULL(s.atk_count, 0) + IFNULL(s.def_count, 0) AS total_bat,
+           IFNULL(s.land_count, 0) AS land_count, IFNULL(s.last_time, 0) AS last_time
+    FROM team_user t
+    LEFT JOIN stats s ON s.name = t.name
+    WHERE t.name != ''
+    ORDER BY t.contribute_week DESC"""
+    return _coerce_numeric(pd.read_sql_query(sql, conn))
 
 
 @st.cache_data(show_spinner=False)
 def query_member_activity():
     """赛季总活跃度(与桌面 GetMemberActivity 一致)：武勋/势力/参战/翻地等原始统计。
+    服务端一次性 GROUP BY 聚合返回，避免逐成员嵌套子查询反复全表扫烧云额度。
     只缓存原始统计，join_days/24h在线/活跃度得分由页面层按当前时间实时计算"""
     conn = get_conn()
     my_union = resolve_my_union(conn)
+    mu_lit = "''" if not my_union else "'" + str(my_union).replace("'", "''") + "'"
     sql = f"""
-    WITH base AS (
-        SELECT t.name, t.`group`, t.wu, t.power, t.join_time,
-               (SELECT COUNT(*) FROM battle_report b WHERE b.attack_name = t.name) +
-               (SELECT COUNT(*) FROM reports r WHERE r.attack_name = t.name) AS atk_count,
-               (SELECT COUNT(*) FROM battle_report b WHERE b.defend_name = t.name) AS def_count,
-               (SELECT COUNT(*) FROM battle_report b
-                WHERE ((b.battle_desc != '' AND (b.battle_desc LIKE '%占领了%' OR b.battle_desc LIKE '%拆除%')
-                        AND b.battle_desc NOT LIKE '%沃土%')
-                       OR (b.battle_desc = '' AND b.wid_name LIKE '土地%' AND b.wid_name NOT LIKE '%沃土%'))
-                  AND b.attack_name = t.name AND b.defend_union_name != '' AND b.defend_union_name != ?
-                  AND b.npc = 0 AND b.result IN (1,2,3,4,10,18,19)) AS land_count,
-               (SELECT MAX(MAX(b.time), (SELECT MAX(r2.time) FROM reports r2 WHERE r2.attack_name = t.name))
-                FROM battle_report b WHERE b.attack_name = t.name OR b.defend_name = t.name) AS last_time
-        FROM team_user t WHERE t.name != ''
+    WITH stats AS (
+        SELECT name,
+               SUM(atk) AS atk_count, SUM(def) AS def_count,
+               SUM(land) AS land_count, MAX(last_time) AS last_time
+        FROM (
+            SELECT attack_name AS name, 1 AS atk, 0 AS def, 0 AS land, time AS last_time
+            FROM battle_report
+            UNION ALL
+            SELECT defend_name AS name, 0 AS atk, 1 AS def, 0 AS land, time AS last_time
+            FROM battle_report
+            UNION ALL
+            SELECT attack_name AS name, 0 AS atk, 0 AS def, 1 AS land, 0 AS last_time
+            FROM battle_report
+            WHERE ((battle_desc != '' AND (battle_desc LIKE '%占领了%' OR battle_desc LIKE '%拆除%')
+                    AND battle_desc NOT LIKE '%沃土%')
+                   OR (battle_desc = '' AND wid_name LIKE '土地%' AND wid_name NOT LIKE '%沃土%'))
+              AND defend_union_name != '' AND defend_union_name != {mu_lit}
+              AND npc = 0 AND result IN (1,2,3,4,10,18,19)
+            UNION ALL
+            SELECT attack_name AS name, 1 AS atk, 0 AS def, 0 AS land, time AS last_time
+            FROM reports
+        )
+        GROUP BY name
     )
-    SELECT b.name, b.`group`, b.wu, b.power, b.join_time,
-           b.atk_count, b.def_count, b.atk_count + b.def_count AS total_bat, b.land_count, b.last_time
-    FROM base b"""
-    return pd.read_sql_query(sql, conn, params=[my_union])
+    SELECT t.name, t.`group`, t.wu, t.power, t.join_time,
+           IFNULL(s.atk_count, 0) AS atk_count, IFNULL(s.def_count, 0) AS def_count,
+           IFNULL(s.atk_count, 0) + IFNULL(s.def_count, 0) AS total_bat,
+           IFNULL(s.land_count, 0) AS land_count, IFNULL(s.last_time, 0) AS last_time
+    FROM team_user t
+    LEFT JOIN stats s ON s.name = t.name
+    WHERE t.name != ''"""
+    return _coerce_numeric(pd.read_sql_query(sql, conn))
 
 
 def decorate_activity(df):
     """按当前时间实时计算 join_days/24h在线/活跃度得分，公式与桌面 GetMemberActivity 完全一致：
-    总场次×0.4 + 武勋/1000×0.3 + (24h内参战? +20) + (加入天数>0? 总场次/加入天数×5)"""
+    总场次x0.4 + 武勋/1000x0.3 + (24h内参战? +20) + (加入天数>0? 总场次/加入天数x5)"""
     if df is None or not len(df):
         return df
     df = df.copy()
     now = int(time.time())
     cutoff = now - 86400
     df["join_days"] = df["join_time"].apply(
-        lambda j: max(1, (now - int(j)) // 86400) if j is not None and int(j) > 0 else 0)
+        lambda j: max(1, (now - _to_int(j)) // 86400) if _to_int(j) > 0 else 0)
     df["active_24h"] = df["last_time"].apply(
-        lambda t: 1 if t is not None and int(t) >= cutoff else 0)
+        lambda t: 1 if _to_int(t) >= cutoff else 0)
 
     def score(r):
-        s = float(r["total_bat"]) * 0.4 + float(r["wu"]) / 1000.0 * 0.3
+        s = float(_to_int(r["total_bat"])) * 0.4 + float(_to_int(r["wu"])) / 1000.0 * 0.3
         if r["active_24h"]:
             s += 20
         if r["join_days"] > 0:
-            s += float(r["total_bat"]) / float(r["join_days"]) * 5
+            s += float(_to_int(r["total_bat"])) / float(r["join_days"]) * 5
         return round(s, 2)
 
     df["score"] = df.apply(score, axis=1)
@@ -642,25 +676,13 @@ def query_teams(player_kw="", union_kw=""):
 
 st.sidebar.title("🗡️ 同盟数据查询")
 with st.sidebar.container():
-    _src = st.sidebar.radio("数据来源", ["本地数据库", "云端 Turso"], key="data_source", horizontal=True)
-    if _src == "本地数据库":
-        _db_files = list_local_dbs()
-        if _db_files:
-            _cur = st.session_state.get("local_db", "")
-            if _cur not in _db_files:
-                _cur = _db_files[0]
-            st.sidebar.selectbox("数据库文件", _db_files, key="local_db", index=_db_files.index(_cur))
-            st.sidebar.caption(f"目录: {DB_DIR}")
-        else:
-            st.sidebar.warning(f"{DB_DIR} 下没有 .db 文件")
-    else:
-        if not turso_secret("TURSO_URL") or not turso_secret("TURSO_TOKEN"):
-            st.sidebar.warning("未配置云端 Turso secrets，将无法连接")
+    if not turso_secret("TURSO_URL") or not turso_secret("TURSO_TOKEN"):
+        st.sidebar.warning("未配置云端 secrets(.streamlit/secrets.toml: TURSO_URL/TURSO_TOKEN)，将无法连接")
     # 每次切换界面时轻量检查数据是否有更新：无变动复用缓存，有变动才清缓存重读
     maybe_refresh_cache()
     _latest = safe_query(latest_data_time)
     st.sidebar.caption(f"📅 最新数据: {format_ts(_latest) if _latest is not None else '未知'}")
-    st.sidebar.caption("本地数据库=应用端同步/采集的数据(需与应用端同机，只读直连不占写锁)；云端=部署到服务器时用，数据由应用端同步器推送")
+    st.sidebar.caption("数据源=云端 Turso，数据由应用端同步器(sync.go)推送，网站只读")
 page = st.sidebar.radio("功能", ["队伍查询", "同盟成员", "分组武勋", "活跃度分析"], key="page")
 
 def kw_inputs(page_key):

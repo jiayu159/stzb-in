@@ -352,6 +352,41 @@ func syncTableDelta(t syncTable) (int64, error) {
 				return 0, fmt.Errorf("按 name 刷新 %d 个成员失败: %v", len(names), err)
 			}
 		}
+		// 同步退盟删除：云端还有、但本地名单已没有的成员(退盟者)一并删除，
+		// 与本地 parseTeamUser 的"保存最新全量+删除不在名单成员"语义一致，云端只保留当前在盟成员
+		cloudRows, err := tursoQueryRows("SELECT name FROM team_user WHERE name != ''")
+		if err != nil {
+			return 0, fmt.Errorf("查询云端成员名单失败: %v", err)
+		}
+		localSet := make(map[string]struct{}, len(names))
+		for _, n := range names {
+			localSet[n] = struct{}{}
+		}
+		var stale []string
+		for _, r := range cloudRows {
+			if len(r) == 0 || r[0] == "" {
+				continue
+			}
+			if _, ok := localSet[r[0]]; !ok {
+				stale = append(stale, r[0])
+			}
+		}
+		for i := 0; i < len(stale); i += 500 {
+			end := i + 500
+			if end > len(stale) {
+				end = len(stale)
+			}
+			var lits []string
+			for _, n := range stale[i:end] {
+				lits = append(lits, sqlLiteral(n))
+			}
+			if err := tursoExecute("DELETE FROM team_user WHERE name IN (" + strings.Join(lits, ",") + ")"); err != nil {
+				return 0, fmt.Errorf("清理云端退盟成员失败(共%d个): %v", len(stale), err)
+			}
+		}
+		if len(stale) > 0 {
+			log.Printf("同步器: %s 清理云端退盟成员 %d 个", t.Name, len(stale))
+		}
 		log.Printf("同步器: %s 按 name 刷新 %d 个成员", t.Name, len(names))
 		lastID = 0
 		total = int64(len(names))
