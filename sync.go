@@ -1,35 +1,95 @@
 package main
 
 import (
-	"bytes"
-	_ "embed"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"stzbHelper/global"
 	"stzbHelper/model"
 )
 
-//go:embed turso.json
-var embeddedTursoJSON []byte
+// Supabase(PostgreSQL) 云数据库增量同步器
+// 配置: exe 同目录 supabase.json {"host":"aws-0-xx.pooler.supabase.com","port":6543,"user":"postgres.xxx","password":"...","dbname":"postgres","sslmode":"require"}，文件缺失时同步禁用
+// 多盟共库: 云端三张表统一在最前有 alliance 列(TEXT NOT NULL DEFAULT '')，主键为 (alliance, 本地主键)；
+// 联盟标识优先取配置文件可选字段 alliance；未配置时从本地数据库自动识别同盟名(同 app resolveMyUnion)；
+// 识别不到才回落 "default"，互不覆盖
+// 原理: 每张表按主键游标增量读取本地记录，通过 pgx 批量 INSERT ... ON CONFLICT 到 Supabase
 
-// Turso 云数据库增量同步器
-// 配置: exe 同目录 turso.json {"url":"https://xxx.turso.io","token":"..."}，文件缺失时同步禁用
-// 原理: 每张表按主键游标增量读取本地记录，通过 Hrana over HTTP 批量 INSERT OR REPLACE 到 Turso
+type supabaseConfig struct {
+	Host      string `json:"host"`
+	Port      int    `json:"port"`
+	User      string `json:"user"`
+	Password  string `json:"password"`
+	DBName    string `json:"dbname"`
+	SSLMode   string `json:"sslmode"`
+	Alliance  string `json:"alliance,omitempty"` // 可选: 联盟标识(多盟共库时区分数据)，为空时回落 "default"
+}
 
-type tursoConfig struct {
-	URL       string `json:"url"`
-	Token     string `json:"token"`
-	AllowedDb string `json:"allowedDb"` // 可选: 允许同步的数据库文件名(不含 .db)，防止别人用此配置把其他库数据推入
+// syncAlliance 返回本机同步数据的联盟标识：配置文件 alliance > 本地自动识别 > "default"
+// (不配置也识别不到时回落 "default"，避免空值撞上旧数据(旧行 alliance=''))
+func syncAlliance() string {
+	syncMu.Lock()
+	defer syncMu.Unlock()
+	if syncCfg.Alliance != "" {
+		return syncCfg.Alliance
+	}
+	if autoAlliance != "" {
+		return autoAlliance
+	}
+	return "default"
+}
+
+// autoAlliance 从本地数据库自动识别的联盟名(多盟共库时区分数据)；配置文件未指定 alliance 时使用。
+// 每轮同步前由 refreshAutoAlliance 刷新，识别失败保留上次有效值
+var autoAlliance string
+
+// detectAllianceFromDB 从当前本地库推断同盟名(app 端 resolveMyUnion 同源 SQL，仅读本地库，不发网络请求)。
+// 返回空串表示未能识别
+func detectAllianceFromDB() string {
+	if model.Conn == nil {
+		return ""
+	}
+	var union string
+	model.Conn.Raw(`SELECT attack_union_name FROM battle_report
+		WHERE attack_name IN (SELECT name FROM team_user WHERE name != '')
+		AND attack_union_name != '' AND attack_union_name != defend_union_name
+		GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1`).Scan(&union)
+	if union == "" {
+		model.Conn.Raw(`SELECT defend_union_name FROM battle_report
+			WHERE defend_name IN (SELECT name FROM team_user WHERE name != '')
+			AND defend_union_name != '' AND defend_union_name != attack_union_name
+			GROUP BY defend_union_name ORDER BY COUNT(*) DESC LIMIT 1`).Scan(&union)
+	}
+	if union == "" {
+		model.Conn.Raw(`SELECT attack_union_name FROM battle_report
+			WHERE attack_union_name != ''
+			GROUP BY attack_union_name ORDER BY COUNT(*) DESC LIMIT 1`).Scan(&union)
+	}
+	return union
+}
+
+// refreshAutoAlliance 每轮同步前刷新自动识别结果；识别为空时保留旧值，
+// 避免临时识别不到导致联盟标识漂移
+func refreshAutoAlliance() {
+	v := detectAllianceFromDB()
+	if v == "" {
+		return
+	}
+	syncMu.Lock()
+	defer syncMu.Unlock()
+	autoAlliance = v
+	log.Printf("同步器: 自动识别同盟联盟=%s", v)
 }
 
 type syncTable struct {
@@ -42,7 +102,7 @@ type syncTable struct {
 var syncTables = []syncTable{
 	{Name: "battle_report", PkColumn: "battle_id", RecentFix: 3000},
 	{Name: "reports", PkColumn: "battle_id"},
-	{Name: "team_user", PkColumn: "id", ReplaceAll: true}, // 按 name 刷新: 只删本批名字，云端他人记录保留(并集)
+	{Name: "team_user", PkColumn: "id", ReplaceAll: true}, // 按 name 刷新: 只删本盟(同 alliance)本批名字，云端他人/他盟记录保留(并集)
 }
 
 type syncStatus struct {
@@ -52,45 +112,58 @@ type syncStatus struct {
 }
 
 var (
-	syncMu        sync.Mutex
-	syncCfg       tursoConfig
-	syncEnabled   bool
-	syncLastRun   int64
-	syncLastErr   string
-	syncNotifyCh  = make(chan struct{}, 1)
-	syncRunning   bool
-	syncWaitingDB bool // 等待数据库打开(临时)，由 StartSyncLoop 循环重试 initSync
-	syncHTTP      = &http.Client{Timeout: 30 * time.Second}
+	syncMu         sync.Mutex
+	syncCfg        supabaseConfig
+	pgPool         *pgxpool.Pool
+	syncEnabled    bool
+	syncConfigOK   bool // supabase.json 存在且 host/user/password 完整(与是否连上云端/是否打开数据库无关)，供前端展示
+	syncLastRun    int64
+	syncLastErr    string
+	syncNotifyCh   = make(chan struct{}, 1)
+	syncRunning    bool
+	syncWaitingDB  bool // 等待数据库打开(临时)，由 StartSyncLoop 循环重试 initSync
 )
 
 func initSync() {
-	// 优先读 exe 同目录外部 turso.json(便于换库/换 token)，缺失时使用编译嵌入的配置
+	// 读取 exe 同目录外部 supabase.json(便于换库/换密码)，缺失则云同步禁用
 	var data []byte
 	exePath, err := os.Executable()
 	if err == nil {
-		cfgPath := filepath.Join(filepath.Dir(exePath), "turso.json")
+		cfgPath := filepath.Join(filepath.Dir(exePath), "supabase.json")
 		data, err = os.ReadFile(cfgPath)
 		if err != nil {
-			log.Println("同步器: 未找到外部 turso.json，使用内置配置")
+			log.Println("同步器: 未找到外部 supabase.json，云同步禁用")
 		}
 	}
 	if len(data) == 0 {
-		data = embeddedTursoJSON
-	}
-	if len(data) == 0 {
-		log.Println("同步器: 无 turso 配置，云同步禁用")
+		log.Println("同步器: 无 supabase 配置，云同步禁用")
+		syncConfigOK = false
 		syncWaitingDB = false
 		return
 	}
-	var cfg tursoConfig
-	if err := json.Unmarshal(data, &cfg); err != nil || cfg.URL == "" || cfg.Token == "" {
-		log.Println("同步器: turso.json 格式错误(url/token 不能为空)，云同步禁用")
+	var cfg supabaseConfig
+	if err := json.Unmarshal(data, &cfg); err != nil || cfg.Host == "" || cfg.User == "" || cfg.Password == "" {
+		log.Println("同步器: supabase.json 格式错误(host/user/password 不能为空)，云同步禁用")
+		syncConfigOK = false
 		syncWaitingDB = false
 		return
 	}
 	syncCfg = cfg
-	// Hrana over HTTP 需要 https 端点，libsql:// 前缀自动转换
-	syncCfg.URL = strings.Replace(syncCfg.URL, "libsql://", "https://", 1)
+	syncConfigOK = true
+	if syncCfg.Port == 0 {
+		syncCfg.Port = 6543 // Supavisor 连接池默认端口(支持 IPv4)
+	}
+	if syncCfg.DBName == "" {
+		syncCfg.DBName = "postgres"
+	}
+	if syncCfg.SSLMode == "" {
+		syncCfg.SSLMode = "require"
+	}
+	if err := initPGPool(); err != nil {
+		log.Printf("同步器: 连接 Supabase 失败: %v，云同步禁用", err)
+		syncWaitingDB = false
+		return
+	}
 	// 数据库绑定校验已解除: 不再校验库名，允许任意本地库同步到云端
 	if global.CurrentDbName == "" {
 		// 数据库还没打开，属于临时状态: 由 StartSyncLoop 循环重试 initSync
@@ -100,7 +173,37 @@ func initSync() {
 	}
 	syncWaitingDB = false
 	syncEnabled = true
-	log.Printf("同步器: 已启用，目标 %s", syncCfg.URL)
+	log.Printf("同步器: 已启用，目标 %s:%d/%s, 联盟=%s", syncCfg.Host, syncCfg.Port, syncCfg.DBName, syncAlliance())
+}
+
+// initPGPool 初始化 Supabase 的 PostgreSQL 连接池(Supavisor 连接池, IPv4 可达)。
+// 连接失败视为配置不可用，云同步禁用；改动配置后重启应用即可重试
+func initPGPool() error {
+	dsn := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",
+		syncCfg.Host, syncCfg.Port, syncCfg.User, syncCfg.Password, syncCfg.DBName, syncCfg.SSLMode)
+	poolCfg, err := pgxpool.ParseConfig(dsn)
+	if err != nil {
+		return fmt.Errorf("解析连接串失败: %w", err)
+	}
+	poolCfg.MaxConns = 4
+	poolCfg.MinConns = 1
+	poolCfg.MaxConnLifetime = time.Hour
+	poolCfg.ConnConfig.ConnectTimeout = 20 * time.Second
+	pool, err := pgxpool.NewWithConfig(context.Background(), poolCfg)
+	if err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	if err := pool.Ping(ctx); err != nil {
+		pool.Close()
+		return err
+	}
+	if pgPool != nil {
+		pgPool.Close()
+	}
+	pgPool = pool
+	return nil
 }
 
 // 每张表上次成功同步时的本地数据指纹(MAX(pk):COUNT)，用于推送前检测本地是否有变化
@@ -189,6 +292,9 @@ func syncOnce() {
 		return
 	}
 
+	// 每轮同步前刷新自动识别同盟名(识别失败保留旧值)
+	refreshAutoAlliance()
+
 	// 推送前先检测本地数据是否有变化，没有变化则跳过本轮推送，避免频繁请求浪费云端资源
 	if !localChanged() {
 		log.Println("同步器: 本地数据无变化，跳过本轮推送")
@@ -253,6 +359,9 @@ func syncOnceDetailed() []syncResult {
 	if !syncEnabled || model.Conn == nil {
 		return results
 	}
+
+	// 手动推送同样先刷新自动识别同盟名
+	refreshAutoAlliance()
 
 	ensureSyncTables()
 	if err := ensureCloudSchema(); err != nil {
@@ -336,7 +445,8 @@ func syncTableDelta(t syncTable) (int64, error) {
 	var total int64
 	var lastID int64
 	if t.ReplaceAll {
-		// 从本地读出全部成员名，云端仅删除这些名字的旧记录(分批)，避免本地是云端子集时整表覆盖丢失他人数据
+		// 从本地读出全部成员名，云端仅删除本盟(同 alliance)这些名字的旧记录(分批)，避免本地是云端子集时整表覆盖丢失他人数据
+		allianceLit := sqlLiteral(syncAlliance())
 		var names []string
 		model.Conn.Model(&model.TeamUser{}).Where("name != ''").Pluck("name", &names)
 		for i := 0; i < len(names); i += 500 {
@@ -348,13 +458,13 @@ func syncTableDelta(t syncTable) (int64, error) {
 			for _, n := range names[i:end] {
 				lits = append(lits, sqlLiteral(n))
 			}
-			if err := tursoExecute("DELETE FROM team_user WHERE name IN (" + strings.Join(lits, ",") + ")"); err != nil {
+			if err := pgExec("DELETE FROM team_user WHERE alliance = " + allianceLit + " AND name IN (" + strings.Join(lits, ",") + ")"); err != nil {
 				return 0, fmt.Errorf("按 name 刷新 %d 个成员失败: %v", len(names), err)
 			}
 		}
-		// 同步退盟删除：云端还有、但本地名单已没有的成员(退盟者)一并删除，
+		// 同步退盟删除：云端本盟还有、但本地名单已没有的成员(退盟者)一并删除，
 		// 与本地 parseTeamUser 的"保存最新全量+删除不在名单成员"语义一致，云端只保留当前在盟成员
-		cloudRows, err := tursoQueryRows("SELECT name FROM team_user WHERE name != ''")
+		cloudRows, err := pgQueryRows("SELECT name FROM team_user WHERE name != '' AND alliance = " + allianceLit)
 		if err != nil {
 			return 0, fmt.Errorf("查询云端成员名单失败: %v", err)
 		}
@@ -380,7 +490,7 @@ func syncTableDelta(t syncTable) (int64, error) {
 			for _, n := range stale[i:end] {
 				lits = append(lits, sqlLiteral(n))
 			}
-			if err := tursoExecute("DELETE FROM team_user WHERE name IN (" + strings.Join(lits, ",") + ")"); err != nil {
+			if err := pgExec("DELETE FROM team_user WHERE alliance = " + allianceLit + " AND name IN (" + strings.Join(lits, ",") + ")"); err != nil {
 				return 0, fmt.Errorf("清理云端退盟成员失败(共%d个): %v", len(stale), err)
 			}
 		}
@@ -453,9 +563,8 @@ func syncTableDelta(t syncTable) (int64, error) {
 			return total, nil
 		}
 
-		sql := fmt.Sprintf("INSERT OR REPLACE INTO %s (%s) VALUES %s",
-			t.Name, strings.Join(colsQuoted, ","), strings.Join(batch, ","))
-		if err := tursoExecute(sql); err != nil {
+		sql := upsertSQL(t.Name, cols, batch, syncAlliance(), t.PkColumn)
+		if err := pgExec(sql); err != nil {
 			// 失败时把本批数据(主键)和云端原因一并返回，便于定位
 			rangeDesc := strings.Join(ids, ",")
 			if len(ids) > 20 {
@@ -481,120 +590,82 @@ func syncTableDelta(t syncTable) (int64, error) {
 	}
 }
 
-// tursoPipeline 通过 Hrana over HTTP 发送单条 SQL 到云端 pipeline 端点，返回未解析的响应体字节。
-// 执行与查询共用此发送逻辑；HTTP 非 200 时直接报错
-func tursoPipeline(sql string) ([]byte, error) {
-	payload := map[string]interface{}{
-		"requests": []map[string]interface{}{
-			{
-				"type": "execute",
-				"stmt": map[string]interface{}{"sql": sql},
-			},
-		},
-		"batches": []interface{}{},
+// pgExec 通过 pgx 执行单条 SQL 到 Supabase(PostgreSQL)
+func pgExec(sql string) error {
+	if pgPool == nil {
+		return fmt.Errorf("Supabase 连接池未初始化")
 	}
-	body, _ := json.Marshal(payload)
-	req, err := http.NewRequest("POST", syncCfg.URL+"/v2/pipeline", bytes.NewReader(body))
-	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+syncCfg.Token)
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := syncHTTP.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer resp.Body.Close()
-	respBody, _ := io.ReadAll(resp.Body)
-	if resp.StatusCode != 200 {
-		return nil, fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(respBody))
-	}
-	return respBody, nil
-}
-
-// tursoExecute 通过 Hrana over HTTP 执行单条 SQL（批量语句）
-func tursoExecute(sql string) error {
-	respBody, err := tursoPipeline(sql)
-	if err != nil {
-		return err
-	}
-	var result struct {
-		Results []struct {
-			Type  string `json:"type"`
-			Error *struct {
-				Message string `json:"message"`
-			} `json:"error"`
-			Response struct {
-				Error *struct {
-					Message string `json:"message"`
-				} `json:"error"`
-			} `json:"response"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return fmt.Errorf("响应解析失败: %v (%s)", err, string(respBody))
-	}
-	if len(result.Results) > 0 && result.Results[0].Type == "error" {
-		if result.Results[0].Error != nil {
-			return fmt.Errorf("Turso 执行失败: %s", result.Results[0].Error.Message)
-		}
-		return fmt.Errorf("Turso 执行失败: %s", string(respBody))
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	if _, err := pgPool.Exec(ctx, sql); err != nil {
+		return fmt.Errorf("Supabase 执行失败: %v", err)
 	}
 	return nil
 }
 
-// tursoQueryRows 查询云端并返回每行各列的字符串值。用于推送前查询云端已存在的主键，
-// 避免把已存在的行重复推送浪费额度。每行各列原始值为 {type,value}，null 时值为空字符串
-func tursoQueryRows(sql string) ([][]string, error) {
-	respBody, err := tursoPipeline(sql)
+// pgQueryRows 查询 Supabase 并返回每行各列的字符串值。用于推送前查询云端已存在的主键，
+// 避免把已存在的行重复推送浪费额度；null 值返回空字符串
+func pgQueryRows(sql string) ([][]string, error) {
+	if pgPool == nil {
+		return nil, fmt.Errorf("Supabase 连接池未初始化")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	rows, err := pgPool.Query(ctx, sql)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("云端查询失败: %v", err)
 	}
-	var result struct {
-		Results []struct {
-			Type  string `json:"type"` // ok=成功, error=执行失败
-			Error *struct {
-				Message string `json:"message"`
-			} `json:"error"`
-			Response struct {
-				Type string `json:"type"`
-				Result struct {
-					Rows [][]struct {
-						Type  string  `json:"type"`
-						Value *string `json:"value"`
-					} `json:"rows"`
-				} `json:"result"`
-			} `json:"response"`
-		} `json:"results"`
-	}
-	if err := json.Unmarshal(respBody, &result); err != nil {
-		return nil, fmt.Errorf("响应解析失败: %v (%s)", err, string(respBody))
-	}
-	if len(result.Results) == 0 {
-		return nil, fmt.Errorf("云端无响应结果")
-	}
-	res := result.Results[0]
-	if res.Type == "error" {
-		if res.Error != nil {
-			return nil, fmt.Errorf("云端查询失败: %s", res.Error.Message)
+	defer rows.Close()
+	var out [][]string
+	for rows.Next() {
+		vals, err := rows.Values()
+		if err != nil {
+			return nil, err
 		}
-		return nil, fmt.Errorf("云端查询失败: %s", string(respBody))
-	}
-	if res.Type != "ok" {
-		return nil, fmt.Errorf("云端响应类型异常: %s", res.Type)
-	}
-	rows := make([][]string, 0, len(res.Response.Result.Rows))
-	for _, r := range res.Response.Result.Rows {
-		out := make([]string, len(r))
-		for i, cell := range r {
-			if cell.Value != nil {
-				out[i] = *cell.Value
+		row := make([]string, len(vals))
+		for i, v := range vals {
+			if v == nil {
+				row[i] = ""
+			} else {
+				row[i] = fmt.Sprintf("%v", v)
 			}
 		}
-		rows = append(rows, out)
+		out = append(out, row)
 	}
-	return rows, nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+// upsertSQL 生成 PostgreSQL 兼容的批量 upsert: INSERT ... ON CONFLICT ("alliance", pk) DO UPDATE SET ...
+// alliance 为当前机器配置的联盟标识；rows 的每行与 cols(本地列)一一对应，
+// 云端 INSERT 列自动在最前补 alliance 列
+func upsertSQL(table string, cols []string, rows []string, alliance, pk string) string {
+	cloudCols := make([]string, 0, len(cols)+1)
+	cloudCols = append(cloudCols, `"alliance"`)
+	for _, c := range cols {
+		cloudCols = append(cloudCols, `"`+c+`"`)
+	}
+	lit := sqlLiteral(alliance)
+	cloudRows := make([]string, len(rows))
+	for i, r := range rows {
+		// r 形如 (v1,v2,...) -> (lit,v1,v2,...)
+		cloudRows[i] = "(" + lit + "," + r[1:]
+	}
+	sets := make([]string, 0, len(cols))
+	for _, c := range cols {
+		if c == pk {
+			continue
+		}
+		sets = append(sets, fmt.Sprintf(`"%s" = EXCLUDED."%s"`, c, c))
+	}
+	if len(sets) == 0 {
+		return fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s ON CONFLICT ("alliance", "%s") DO NOTHING`,
+			table, strings.Join(cloudCols, ","), strings.Join(cloudRows, ","), pk)
+	}
+	return fmt.Sprintf(`INSERT INTO %s (%s) VALUES %s ON CONFLICT ("alliance", "%s") DO UPDATE SET %s`,
+		table, strings.Join(cloudCols, ","), strings.Join(cloudRows, ","), pk, strings.Join(sets, ","))
 }
 
 // sqlLiteral 把数据库值转成 SQL 字面量
@@ -669,7 +740,40 @@ func colType(t string) string {
 	return t
 }
 
-// ensureCloudSchema 在云端按本地表结构建表(含主键)，保证 INSERT OR REPLACE 可用
+// sqliteToPG 本地 SQLite 表类型到 PostgreSQL 类型的映射
+var sqliteToPG = map[string]string{
+	"INTEGER":    "BIGINT",
+	"INT":        "INTEGER",
+	"BIGINT":     "BIGINT",
+	"TINYINT":    "SMALLINT",
+	"TEXT":       "TEXT",
+	"VARCHAR":    "TEXT",
+	"CHAR":       "TEXT",
+	"CLOB":       "TEXT",
+	"REAL":       "DOUBLE PRECISION",
+	"FLOAT":      "DOUBLE PRECISION",
+	"DOUBLE":     "DOUBLE PRECISION",
+	"NUMERIC":    "NUMERIC",
+	"DECIMAL":    "NUMERIC",
+	"BOOLEAN":    "BOOLEAN",
+	"DATE":       "DATE",
+	"DATETIME":   "TIMESTAMP",
+	"BLOB":       "BYTEA",
+}
+
+// pgType 把 SQLite 列类型映射为 PostgreSQL 类型，未知名一律 TEXT
+func pgType(sqliteType string) string {
+	key := strings.ToUpper(strings.TrimSpace(sqliteType))
+	if t, ok := sqliteToPG[key]; ok {
+		return t
+	}
+	return "TEXT"
+}
+
+// ensureCloudSchema 在 Supabase 按本地表结构建表(含主键)。主键缺失时用同步主键列兜底，
+// 保证后续 INSERT ... ON CONFLICT (alliance, pk) 可用。
+// 云端统一在最前增加 alliance 列(TEXT NOT NULL DEFAULT '')，主键升级为 (alliance, 本地主键)；
+// 已存在的旧表(无 alliance 列/旧单列主键)不重建，通过 ALTER 加列 + 重建主键平滑升级，旧行保留( alliance='' )
 func ensureCloudSchema() error {
 	for _, t := range syncTables {
 		rows, err := model.Conn.Raw(fmt.Sprintf("PRAGMA table_info(%s)", t.Name)).Rows()
@@ -678,6 +782,7 @@ func ensureCloudSchema() error {
 		}
 		var colDefs []string
 		var pkCols []string
+		hasPK := false
 		for rows.Next() {
 			var cid, notnull, pk int
 			var name, ctype string
@@ -686,22 +791,85 @@ func ensureCloudSchema() error {
 				rows.Close()
 				return err
 			}
-			colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, name, colType(ctype)))
+			colDefs = append(colDefs, fmt.Sprintf(`"%s" %s`, name, pgType(ctype)))
 			if pk > 0 {
-				pkCols = append(pkCols, fmt.Sprintf(`"%s"`, name))
+				pkCols = append(pkCols, name)
+				hasPK = true
 			}
 		}
 		rows.Close()
 		if len(colDefs) == 0 {
 			continue
 		}
-		if len(pkCols) > 0 {
-			colDefs = append(colDefs, "PRIMARY KEY ("+strings.Join(pkCols, ",")+")")
+		effectivePK := pkCols
+		if !hasPK {
+			// 本地表缺主键时用同步主键兜底，保证 upsert 可用
+			effectivePK = []string{t.PkColumn}
 		}
+		// 云端列 = alliance(首列) + 本地列；主键 = (alliance, 本地主键)
+		colDefs = append([]string{`"alliance" TEXT NOT NULL DEFAULT ''`}, colDefs...)
+		quotedPK := make([]string, len(effectivePK))
+		for i, c := range effectivePK {
+			quotedPK[i] = `"` + c + `"`
+		}
+		colDefs = append(colDefs, "PRIMARY KEY (\"alliance\","+strings.Join(quotedPK, ",")+")")
 		sql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (%s)", t.Name, strings.Join(colDefs, ","))
-		if err := tursoExecute(sql); err != nil {
+		if err := pgExec(sql); err != nil {
 			return fmt.Errorf("云端建表 %s 失败: %v", t.Name, err)
 		}
+		// 旧表没有 alliance 列时补列(幂等)
+		if err := pgExec(fmt.Sprintf(`ALTER TABLE %s ADD COLUMN IF NOT EXISTS "alliance" TEXT NOT NULL DEFAULT ''`, t.Name)); err != nil {
+			return fmt.Errorf("云端表 %s 补 alliance 列失败: %v", t.Name, err)
+		}
+		// 主键统一为 (alliance, 本地主键)
+		if err := ensureCloudPK(t.Name, effectivePK...); err != nil {
+			return fmt.Errorf("云端表 %s 主键升级失败: %v", t.Name, err)
+		}
+	}
+	return nil
+}
+
+// ensureCloudPK 保证云端表主键为 ("alliance", localPK...) 复合主键(幂等)。
+// 已有旧单列主键时先删除再重建，数据保留(旧行 alliance='')；
+// 新表或已升级过(主键列恰好匹配)时直接跳过
+func ensureCloudPK(table string, localPK ...string) error {
+	rows, err := pgQueryRows(fmt.Sprintf(
+		`SELECT a.attname FROM pg_index i
+		 JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+		 WHERE i.indrelid = %s::regclass AND i.indisprimary
+		 ORDER BY array_position(i.indkey, a.attnum)`, sqlLiteral(table)))
+	if err != nil {
+		return err
+	}
+	current := make([]string, 0, len(rows))
+	for _, r := range rows {
+		if len(r) > 0 && r[0] != "" {
+			current = append(current, r[0])
+		}
+	}
+	expected := append([]string{"alliance"}, localPK...)
+	if slices.Equal(current, expected) {
+		return nil
+	}
+	if len(current) > 0 {
+		cn, err := pgQueryRows(fmt.Sprintf(
+			`SELECT conname FROM pg_constraint WHERE conrelid = %s::regclass AND contype = 'p' LIMIT 1`, sqlLiteral(table)))
+		if err != nil {
+			return err
+		}
+		if len(cn) > 0 && len(cn[0]) > 0 && cn[0][0] != "" {
+			if err := pgExec(fmt.Sprintf(`ALTER TABLE %s DROP CONSTRAINT "%s"`, table, cn[0][0])); err != nil {
+				return fmt.Errorf("删除旧主键 %s 失败: %v", cn[0][0], err)
+			}
+			log.Printf("同步器: 云端表 %s 旧主键 %s 已删除，重建复合主键 (alliance+%v)", table, cn[0][0], localPK)
+		}
+	}
+	quoted := make([]string, len(localPK))
+	for i, c := range localPK {
+		quoted[i] = `"` + c + `"`
+	}
+	if err := pgExec(fmt.Sprintf(`ALTER TABLE %s ADD PRIMARY KEY ("alliance", %s)`, table, strings.Join(quoted, ","))); err != nil {
+		return fmt.Errorf("重建复合主键失败: %v", err)
 	}
 	return nil
 }
@@ -710,11 +878,19 @@ func ensureCloudSchema() error {
 func (a *App) GetSyncStatus() string {
 	syncMu.Lock()
 	defer syncMu.Unlock()
+	// alliance 为展示用有效联盟名: 配置指定 > 本地自动识别；都为空则前端不显示(实际推送回落 "default")
+	alliance := syncCfg.Alliance
+	if alliance == "" {
+		alliance = autoAlliance
+	}
 	return global.Response{Data: map[string]interface{}{
-		"enabled":  syncEnabled,
-		"url":      syncCfg.URL,
-		"last_run": syncLastRun,
-		"last_err": syncLastErr,
+		"enabled":    syncEnabled,
+		"host":       syncCfg.Host,
+		"config_ok":  syncConfigOK,
+		"waiting_db": syncWaitingDB,
+		"alliance":   alliance,
+		"last_run":   syncLastRun,
+		"last_err":   syncLastErr,
 	}}.Success()
 }
 
@@ -724,14 +900,14 @@ func (a *App) ManualSync() string {
 		return global.Response{Message: "数据库未连接，请先选择数据库"}.Error()
 	}
 
-	// 重新读取 turso.json 并检查数据库状态，已禁用的配置不会自动启用
+	// 重新读取 supabase.json 并检查数据库状态，已禁用的配置不会自动启用
 	initSync()
 
 	syncMu.Lock()
 	enabled := syncEnabled
 	syncMu.Unlock()
 	if !enabled {
-		return global.Response{Message: "云同步未启用（turso.json 缺失或 url/token 为空），无法推送"}.Error()
+		return global.Response{Message: "云同步未启用（supabase.json 缺失或 host/user/password 为空），无法推送"}.Error()
 	}
 
 	// 逐表执行一轮同步并收集成功/失败明细
@@ -824,8 +1000,8 @@ func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64
 		for _, id := range ids[i:end] {
 			lits = append(lits, sqlLiteral(id))
 		}
-		cloudRows, err := tursoQueryRows(
-			"SELECT battle_id FROM battle_report WHERE battle_id IN (" + strings.Join(lits, ",") + ")")
+		cloudRows, err := pgQueryRows(
+			"SELECT battle_id FROM battle_report WHERE alliance = " + sqlLiteral(syncAlliance()) + " AND battle_id IN (" + strings.Join(lits, ",") + ")")
 		if err != nil {
 			return 0, 0, 0, 0, 0, nil, fmt.Errorf("查询云端已存在战报失败: %v", err)
 		}
@@ -860,9 +1036,8 @@ func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64
 		if end > len(missVals) {
 			end = len(missVals)
 		}
-		sql := fmt.Sprintf("INSERT OR REPLACE INTO battle_report (%s) VALUES %s",
-			strings.Join(colsQuoted, ","), strings.Join(missVals[i:end], ","))
-		if err := tursoExecute(sql); err != nil {
+		sql := upsertSQL("battle_report", cols, missVals[i:end], syncAlliance(), "battle_id")
+		if err := pgExec(sql); err != nil {
 			failed += int64(end - i)
 			desc := strings.Join(missIds[i:end], ",")
 			if end-i > 20 {
@@ -892,15 +1067,18 @@ func (a *App) ManualPushRecent(count int64) string {
 		return global.Response{Message: "数据库未连接，请先选择数据库"}.Error()
 	}
 
-	// 重新读取 turso.json 并检查数据库状态，已禁用的配置不会自动启用
+	// 重新读取 supabase.json 并检查数据库状态，已禁用的配置不会自动启用
 	initSync()
 
 	syncMu.Lock()
 	enabled := syncEnabled
 	syncMu.Unlock()
 	if !enabled {
-		return global.Response{Message: "云同步未启用（turso.json 缺失或 url/token 为空），无法推送"}.Error()
+		return global.Response{Message: "云同步未启用（supabase.json 缺失或 host/user/password 为空），无法推送"}.Error()
 	}
+
+	// 推送前刷新自动识别同盟名(配置未指定 alliance 时使用识别值)
+	refreshAutoAlliance()
 
 	// 确保云端表结构存在（已存在的表不会重复建）
 	if err := ensureCloudSchema(); err != nil {
