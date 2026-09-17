@@ -841,7 +841,6 @@ with st.sidebar.container():
     maybe_refresh_cache(_alliance_val)
     _latest = safe_query(latest_data_time, _alliance_val)
     st.sidebar.caption(f"📅 最新数据: {format_ts(_latest) if _latest is not None else '未知'}")
-    st.sidebar.caption("数据源=Supabase，数据由应用端同步器(sync.go)推送，网站只读")
 page = st.sidebar.radio("功能", ["队伍查询", "同盟成员", "分组武勋", "活跃度分析"], key="page")
 _aval = st.session_state.get("sel_alliance_val", "")
 
