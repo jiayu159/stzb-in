@@ -156,7 +156,8 @@ def _read_sql(sql, params=None):
 
 def data_fingerprint(alliance=""):
     """云端数据指纹(轻量)：关键表行数与最新时间戳(按所选同盟过滤)。只查标量聚合，读量极小；
-    用于判断数据是否变动——无变动时直接复用缓存，不重复读云端"""
+    用于判断数据是否变动——无变动时直接复用缓存，不重复读云端
+    注意：必须含 battle_report 行数——全量同步补齐中间空洞时 MAX(battle_id/time) 不变，只有行数会变"""
     conn = get_conn()
     if conn is None:
         return None
@@ -166,6 +167,7 @@ def data_fingerprint(alliance=""):
             row = conn.cursor().execute(
                 f"""SELECT (SELECT COUNT(*) FROM team_user WHERE name != ''{cond}),
                           (SELECT COALESCE(MAX(id), 0) FROM team_user WHERE 1 = 1{cond}),
+                          (SELECT COUNT(*) FROM battle_report WHERE 1 = 1{cond}),
                           (SELECT COALESCE(MAX(battle_id), 0) FROM battle_report WHERE 1 = 1{cond}),
                           (SELECT COALESCE(MAX(time), 0) FROM battle_report WHERE 1 = 1{cond}),
                           (SELECT COALESCE(MAX(battle_id), 0) FROM reports WHERE 1 = 1{cond})"""
