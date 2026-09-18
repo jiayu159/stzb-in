@@ -14,6 +14,10 @@ export function CheckNpcap() {
   return window['go']['main']['App']['CheckNpcap']();
 }
 
+export function CheckAndPushAll() {
+  return window['go']['main']['App']['CheckAndPushAll']();
+}
+
 export function CheckUpdate() {
   return window['go']['main']['App']['CheckUpdate']();
 }

@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from 'vue'
 import { NCard, NButton, NStatistic, NGrid, NGi, NTag, NSpace, NSpin, NInputNumber } from 'naive-ui'
-import { GetTaskList, GetTeamUser, GetVersion, GetSyncStatus, ManualPushRecent } from '../../wailsjs/go/main/App'
+import { GetTaskList, GetTeamUser, GetVersion, GetSyncStatus, ManualPushRecent, CheckAndPushAll } from '../../wailsjs/go/main/App'
 import { Activity, Trophy, Shield, Crosshair, List, Bot, RefreshCw, Send } from 'lucide-vue-next'
 
 const taskCount = ref(0)
@@ -16,6 +16,8 @@ const syncLastErr = ref('')
 const pushCount = ref(3000)
 const pushingRecent = ref(false)
 const pushRecentMsg = ref('')
+const pushingAll = ref(false)
+const checkAllMsg = ref('')
 let statusTimer = null
 
 function loadSyncStatus() {
@@ -49,6 +51,29 @@ function pushRecentToCloud() {
         pushRecentMsg.value = '调用失败，请查看运行日志'
     }).finally(() => {
         pushingRecent.value = false
+        loadSyncStatus()
+    })
+}
+
+function checkAllToCloud() {
+    pushingAll.value = true
+    checkAllMsg.value = ''
+    CheckAndPushAll().then(v => {
+        let resp = JSON.parse(v)
+        let b = resp.data && resp.data.battle_report
+        if (resp.code == 200 && b != null) {
+            checkAllMsg.value = `检查并同步完成：战报共 ${b.total} 条、成功推送 ${b.pushed} 条` +
+                (b.failed ? `、失败 ${b.failed} 条（详见日志）` : '，云端已同步全部数据')
+            if (resp.data.team_user && resp.data.team_user.pushed != null) {
+                checkAllMsg.value += `；成员 ${resp.data.team_user.pushed} 名`
+            }
+        } else {
+            checkAllMsg.value = resp.msg || '检查并同步失败，请查看运行日志'
+        }
+    }).catch(() => {
+        checkAllMsg.value = '调用失败，请查看运行日志'
+    }).finally(() => {
+        pushingAll.value = false
         loadSyncStatus()
     })
 }
@@ -110,7 +135,7 @@ onUnmounted(() => {
             </div>
             <div class="sync-row">
                 <span class="sync-row-label">手动推送最新战报</span>
-                <n-input-number v-model:value="pushCount" :min="1" :max="3000" :step="100"
+                <n-input-number v-model:value="pushCount" :min="1" :step="100"
                     :style="{ width: '140px' }" />
                 <span class="sync-row-tip">条（按 battle_id 倒序取本地最新，强制覆盖云端，用于补齐漏掉的数据）</span>
                 <n-button type="primary" :loading="pushingRecent" @click="pushRecentToCloud">
@@ -119,6 +144,15 @@ onUnmounted(() => {
                 </n-button>
             </div>
             <div v-if="pushRecentMsg" class="sync-msg">{{ pushRecentMsg }}</div>
+            <div class="sync-row">
+                <span class="sync-row-label">全量同步</span>
+                <n-button type="warning" :loading="pushingAll" @click="checkAllToCloud">
+                    <template #icon><RefreshCw :size="16" /></template>
+                    检查并数据
+                </n-button>
+                <span class="sync-row-tip">检查并同步本地全部数据到云端（不受条数限制，云端已存在的战报自动跳过）</span>
+            </div>
+            <div v-if="checkAllMsg" class="sync-msg">{{ checkAllMsg }}</div>
         </n-card>
 
         <n-grid :cols="3" :x-gap="16" :y-gap="16" class="stat-grid">

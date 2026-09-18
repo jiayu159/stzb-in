@@ -935,13 +935,17 @@ func (a *App) ManualSync() string {
 	return global.Response{Data: results}.Success()
 }
 
-// pushRecentBatches 把本地最新 count 条战报(battle_id 倒序)分 100 条一批推送到云端。
+// pushRecentBatches 把本地最新 count 条战报(battle_id 倒序)分 100 条一批推送到云端；
+// count<=0 表示全量(推送本地全部战报，不受条数限制)。
 // 不走增量游标：直接按行 INSERT OR REPLACE，用于补齐游标区间内的数据空洞。
 // 推送前先按 500 个 id/批查询云端已存在的 battle_id，已存在的行跳过、只推缺失行，节省云额度。
 // 返回: 成功条数, 失败条数, 失败明细, 总读取条数, 最小/最大 battle_id, 致命错误(本地读取失败/云端查询失败)
 func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64, failMsgs []string, readErr error) {
-	rows, err := model.Conn.Raw(
-		"SELECT * FROM battle_report ORDER BY battle_id DESC LIMIT ?", count).Rows()
+	stmt := "SELECT * FROM battle_report ORDER BY battle_id DESC"
+	if count > 0 {
+		stmt += " LIMIT " + strconv.FormatInt(count, 10)
+	}
+	rows, err := model.Conn.Raw(stmt).Rows()
 	if err != nil {
 		return 0, 0, 0, 0, 0, nil, fmt.Errorf("读取本地战报失败: %v", err)
 	}
@@ -1060,8 +1064,8 @@ func pushRecentBatches(count int64) (pushed, failed, total, minBid, maxBid int64
 // ManualPushRecent 手动检查本地最新 count 条战报(battle_id 倒序)哪些云端缺失并补齐。
 // 不走增量游标：直接按行 INSERT OR REPLACE，用于补齐游标区间内的数据空洞；已存在的行跳过、只推缺失行
 func (a *App) ManualPushRecent(count int64) string {
-	if count <= 0 || count > 3000 {
-		return global.Response{Message: "推送数量需在 1~3000 之间"}.Error()
+	if count <= 0 {
+		return global.Response{Message: "推送数量需为正整数"}.Error()
 	}
 	if model.Conn == nil {
 		return global.Response{Message: "数据库未连接，请先选择数据库"}.Error()
@@ -1110,6 +1114,113 @@ func (a *App) ManualPushRecent(count int64) string {
 	if failed > 0 {
 		data["errors"] = failMsgs
 		return global.Response{Message: fmt.Sprintf("推送完成：成功 %d 条、失败 %d 条（详见运行日志）", pushed, failed), Data: data}.Error()
+	}
+	return global.Response{Data: data}.Success()
+}
+
+// CheckAndPushAll 检查并把本地全部数据同步到云端，不受 3000 条限制：
+// battle_report 全量补齐(本地全部行分批推送、云端已有的 battle_id 自动跳过)、
+// reports 按游标增量、team_user 按 name 全量刷新(含清理云端退盟成员)。
+func (a *App) CheckAndPushAll() string {
+	if model.Conn == nil {
+		return global.Response{Message: "数据库未连接，请先选择数据库"}.Error()
+	}
+
+	// 重新读取 supabase.json 并检查数据库状态，已禁用的配置不会自动启用
+	initSync()
+
+	syncMu.Lock()
+	enabled := syncEnabled
+	if !enabled {
+		syncMu.Unlock()
+		return global.Response{Message: "云同步未启用（supabase.json 缺失或 host/user/password 为空），无法推送"}.Error()
+	}
+	if syncRunning {
+		syncMu.Unlock()
+		return global.Response{Message: "已有同步任务正在运行，请稍后再试"}.Error()
+	}
+	syncRunning = true
+	syncMu.Unlock()
+	defer func() {
+		syncMu.Lock()
+		syncRunning = false
+		syncMu.Unlock()
+	}()
+
+	// 推送前刷新自动识别同盟名(配置未指定 alliance 时使用识别值)
+	refreshAutoAlliance()
+
+	// 确保云端表结构存在（已存在的表不会重复建）
+	ensureSyncTables()
+	if err := ensureCloudSchema(); err != nil {
+		syncMu.Lock()
+		syncLastErr = err.Error()
+		syncMu.Unlock()
+		return global.Response{Message: "云端建表失败: " + err.Error()}.Error()
+	}
+
+	// 1. battle_report 全量补齐（count<=0 表示本地全部行，云端已有跳过）
+	pushed, failed, total, minBid, maxBid, failMsgs, err := pushRecentBatches(0)
+	if err != nil {
+		return global.Response{Message: "读取本地战报失败: " + err.Error()}.Error()
+	}
+
+	// 2. reports 增量 / 3. team_user 按 name 全量刷新
+	var reportsPushed, reportsFailed, userPushed, userFailed int64
+	var reportsMsg, userMsg string
+	for _, t := range syncTables {
+		if t.Name != "reports" && t.Name != "team_user" {
+			continue
+		}
+		n, syncErr := syncTableDelta(t)
+		switch t.Name {
+		case "reports":
+			reportsPushed = n
+			if syncErr != nil {
+				reportsFailed = 1
+				reportsMsg = syncErr.Error()
+			}
+		case "team_user":
+			userPushed = n
+			if syncErr != nil {
+				userFailed = 1
+				userMsg = syncErr.Error()
+			}
+		}
+	}
+
+	anyFail := failed > 0 || reportsFailed > 0 || userFailed > 0
+	syncMu.Lock()
+	syncLastRun = time.Now().Unix()
+	if anyFail {
+		parts := []string{fmt.Sprintf("战报: 共%d 成功%d 失败%d", total, pushed, failed)}
+		if reportsFailed > 0 {
+			parts = append(parts, "reports: "+reportsMsg)
+		}
+		if userFailed > 0 {
+			parts = append(parts, "成员: "+userMsg)
+		}
+		syncLastErr = strings.Join(parts, "; ")
+	}
+	syncMu.Unlock()
+
+	log.Printf("同步器: 检查并全量同步完成, 战报共%d 成功%d 失败%d(battle_id %d~%d), reports %d, 成员 %d",
+		total, pushed, failed, minBid, maxBid, reportsPushed, userPushed)
+
+	data := map[string]interface{}{
+		"battle_report": map[string]interface{}{
+			"total":         total,
+			"pushed":        pushed,
+			"failed":        failed,
+			"min_battle_id": minBid,
+			"max_battle_id": maxBid,
+			"errors":        failMsgs,
+		},
+		"reports":   map[string]interface{}{"pushed": reportsPushed, "failed": reportsFailed, "err": reportsMsg},
+		"team_user": map[string]interface{}{"pushed": userPushed, "failed": userFailed, "err": userMsg},
+	}
+	if anyFail {
+		return global.Response{Message: fmt.Sprintf("检查并同步完成：战报成功 %d 条、失败 %d 条（详见运行日志）", pushed, failed), Data: data}.Error()
 	}
 	return global.Response{Data: data}.Success()
 }

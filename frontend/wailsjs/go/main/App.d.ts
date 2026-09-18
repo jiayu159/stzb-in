@@ -7,6 +7,8 @@ export function CheckAdb():Promise<string>;
 
 export function CheckNpcap():Promise<string>;
 
+export function CheckAndPushAll():Promise<string>;
+
 export function CheckUpdate():Promise<string>;
 
 export function ClearAiChat():Promise<string>;
