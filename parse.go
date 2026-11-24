@@ -794,6 +794,13 @@ func extractPowerRank(msgdata []byte) ([]model.PowerRank, error) {
 	if len(raw) < 5 {
 		return nil, fmt.Errorf("结构不完整")
 	}
+	// 排行榜同用 cmd=700，靠响应结构区分 tab：
+	//   个人势力榜 [0,-1,{自己},300,[[0,{条目}],...]]
+	//   同盟榜     [1,2,null,64,[[0,{union条目}],...]]  ← 会全量覆盖个人榜，必须屏蔽
+	// 只解析个人势力榜：raw[0]==0；同盟/国家/占领等其它榜帧一律忽略
+	if f, ok := raw[0].(float64); !ok || f != 0 {
+		return nil, fmt.Errorf("非个人势力榜(raw[0]=%v)，忽略", raw[0])
+	}
 	entriesRaw, ok := raw[4].([]interface{})
 	if !ok {
 		return nil, fmt.Errorf("缺少条目列表")
@@ -807,6 +814,10 @@ func extractPowerRank(msgdata []byte) ([]model.PowerRank, error) {
 		}
 		ent, ok := pair[1].(map[string]interface{})
 		if !ok {
+			continue
+		}
+		if _, has := ent["land_count"]; !has {
+			// 个人榜条目必含 land_count；不含的说明是其它榜数据，跳过
 			continue
 		}
 		ranks = append(ranks, model.ToPowerRank(len(ranks)+1, ent))
