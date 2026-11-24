@@ -66,6 +66,9 @@ func (a *App) GetTeamGroup() string {
 
 // GetPowerRank 获取势力榜数据(本地 power_rank 表)
 func (a *App) GetPowerRank() string {
+	if model.Conn == nil {
+		return global.Response{Message: "尚未连接数据库，请先选择数据库"}.Error()
+	}
 	var ranks []model.PowerRank
 	model.Conn.Order("rank asc").Find(&ranks)
 	return global.Response{Data: ranks}.Success()

@@ -93,14 +93,9 @@ func captureTCPPackets(deviceName string, wg *sync.WaitGroup) {
 	}
 }
 
-var fullbuf = []byte{}
-var fullsize = 0
-var waitbuf = false
-
 func handlePacket(packet gopacket.Packet) {
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		if appLayer := packet.ApplicationLayer(); appLayer != nil {
-			psh := tcpLayer.(*layers.TCP).PSH
 			dstPort := int(tcpLayer.(*layers.TCP).DstPort)
 			payload := appLayer.Payload()
 
@@ -110,171 +105,171 @@ func handlePacket(packet gopacket.Packet) {
 				return
 			}
 
-			// 服务器 -> 客户端：响应方向（落盘记录响应帧，用于确认请求<->响应对应关系）
-			handleServerResponse(packet, payload)
-
-			if len(payload) < 8 {
-				return
-			}
-			var srcIP string
-			var dstIP string
-			var srcProt int
-			var dstProt int
-			if ipLayer := packet.NetworkLayer(); ipLayer != nil {
-				switch ip := ipLayer.(type) {
-				case *layers.IPv4:
-					srcProt = int(tcpLayer.(*layers.TCP).SrcPort)
-					dstProt = int(tcpLayer.(*layers.TCP).DstPort)
-					srcIP = ip.SrcIP.String() + ":" + strconv.Itoa(srcProt)
-					dstIP = ip.DstIP.String() + ":" + strconv.Itoa(dstProt)
-				case *layers.IPv6:
-					srcProt = int(tcpLayer.(*layers.TCP).SrcPort)
-					dstProt = int(tcpLayer.(*layers.TCP).DstPort)
-					srcIP = ip.SrcIP.String() + ":" + strconv.Itoa(srcProt)
-					dstIP = ip.DstIP.String() + ":" + strconv.Itoa(dstProt)
-				}
-			}
-
-			if global.ExVar.BindIpInfo == true && global.OnlySrcIp != "" && global.OnlyDstIp != "" {
-				if global.OnlySrcIp != srcIP || global.OnlyDstIp != dstIP {
-					if global.IsDebug == true {
-						fmt.Println("IP信息不符合跳过数据处理")
-					}
-					return
-				}
-			}
-
-			var buf []byte
-			if psh != true {
-				waitbuf = true
-				fullbuf = append(fullbuf, payload...)
-				return
-			} else {
-				if waitbuf == true {
-					waitbuf = false
-					buf = append(fullbuf, payload...)
-					fullbuf = []byte{}
-				} else {
-					buf = payload
-				}
-			}
-
-			if global.IsDebug == true {
-				fmt.Println("")
-				fmt.Println("====================================================")
-				fmt.Println("")
-			}
-			bufread := NewBufferFrom(buf)
-			bufsize := bufread.ReadInt()
-			if global.IsDebug == true {
-				fmt.Println("包大小", bufsize)
-			}
-			cmdId := bufread.ReadInt()
-			if global.IsDebug == true {
-				fmt.Println("协议号", cmdId)
-			}
-
-			if len(buf) > 14 {
-				if global.IsDebug == true {
-					fmt.Println("数据类型", buf[12])
-				}
-
-				if buf[12] == 3 {
-					//fmt.Println(len(buf), bufsize, cmdId, "-----------")
-					if len(buf)-bufsize != 4 && (cmdId == 103 || cmdId == 92) {
-						global.LossCmdId = cmdId
-						global.LossBytes = buf
-						global.PacketLoss = true
-						global.NeedBufSize = bufsize
-					} else {
-						go ParseData(cmdId, buf[17:])
-					}
-
-				} else if buf[12] == 5 {
-					//println(buf)
-					if global.IsDebug == true {
-						data := DecodeType5(buf[12:])
-						fmt.Println(data)
-					}
-				} else if buf[12] == 2 {
-
-					//if cmdId == 5028 || cmdId == 5026 {
-					//	fmt.Println(string(buf[12:]))
-					//}
-					//
-					//if cmdId == 5028 {
-					//	Parse5028(buf[13:])
-					//}
-				} else if cmdId > 99999 && global.PacketLoss == true && (global.LossCmdId == 103 || global.LossCmdId == 92) {
-					result := make([]byte, len(buf)+len(global.LossBytes))
-					copy(result, global.LossBytes)
-					copy(result[len(global.LossBytes):], buf)
-					if len(buf)+len(global.LossBytes)-global.NeedBufSize != 4 {
-						global.LossBytes = result
-					} else {
-						global.PacketLoss = false
-						go ParseData(global.LossCmdId, result[17:])
-					}
-
-				}
-
-				if cmdId == 3686 {
-					var data []byte
-					if buf[12] == 5 {
-						data = []byte(DecodeType5(buf[12:]))
-					} else if buf[12] == 3 {
-						data = parseZlibData(buf[17:])
-					}
-
-					if global.ExVar.NeedPushBookData {
-						go parseBookData(data)
-					}
-
-					if databaseSelected == false {
-						var raw []interface{}
-						err := json.Unmarshal([]byte(data), &raw)
-						if err != nil {
-							log.Fatal(err)
-						} else {
-							dataMap := raw[1].(map[string]interface{})
-							server, ok := dataMap["server"].([]interface{})
-							if ok {
-								log.Printf("服务器信息: %v\n", server)
-							}
-
-							var roleName string
-							if logData, ok := dataMap["log"].(map[string]interface{}); ok {
-								roleName = logData["role_name"].(string)
-								log.Printf("角色名: %s\n", roleName)
-							}
-
-							log.Println("本地IP：" + dstIP)
-							log.Println("游戏服务器IP：" + srcIP)
-							global.OnlySrcIp = srcIP
-							global.OnlyDstIp = dstIP
-							dabesename := roleName + "_" + server[0].(string)
-							log.Println("收到主公簿数据，将打开数据库文件" + dabesename + ".db")
-							model.InitDB(dabesename)
-							databaseSelected = true
-						}
-					}
-				}
-			}
-
-			if global.IsDebug == true {
-				fmt.Print("[]byte{")
-				for i, b := range buf {
-					if i > 0 {
-						fmt.Print(", ")
-					}
-					fmt.Print(b)
-				}
-				fmt.Println("}")
-				fmt.Println("")
-				fmt.Println("====================================================")
-				fmt.Println("")
+			// 服务器 -> 客户端：响应方向。
+			// 统一按帧头[0:4]长度字段重组（旧逻辑依赖 PSH+全局fullbuf，多连接交错时会
+			// 把多帧粘成一帧，导致 zlib 解压失败“数据为空”）；日志与主解析共用同一批帧。
+			frames := handleServerResponse(packet, payload)
+			for _, frame := range frames {
+				// 必须复制：frame 只是 serverStream 底层缓冲数组的切片，
+				// ParseData 是异步 goroutine，直接传切片会被后续 append 覆盖。
+				buf := make([]byte, len(frame))
+				copy(buf, frame)
+				processResponseFrame(packet, buf)
 			}
 		}
+	}
+}
+
+// processResponseFrame 处理一条完整响应帧（buf 为独立副本，可安全传给异步 goroutine）。
+// 帧结构：[0:4]长度(总长=长度+4) [4:8]cmdId [8:12]? [12]类型(3=zlib/5=xor152/2=明文) [13:16]? [17:]数据
+func processResponseFrame(packet gopacket.Packet, buf []byte) {
+	if len(buf) < 8 {
+		return
+	}
+	tcpLayer := packet.Layer(layers.LayerTypeTCP).(*layers.TCP)
+	var srcIP string
+	var dstIP string
+	var srcProt int
+	var dstProt int
+	if ipLayer := packet.NetworkLayer(); ipLayer != nil {
+		switch ip := ipLayer.(type) {
+		case *layers.IPv4:
+			srcProt = int(tcpLayer.SrcPort)
+			dstProt = int(tcpLayer.DstPort)
+			srcIP = ip.SrcIP.String() + ":" + strconv.Itoa(srcProt)
+			dstIP = ip.DstIP.String() + ":" + strconv.Itoa(dstProt)
+		case *layers.IPv6:
+			srcProt = int(tcpLayer.SrcPort)
+			dstProt = int(tcpLayer.DstPort)
+			srcIP = ip.SrcIP.String() + ":" + strconv.Itoa(srcProt)
+			dstIP = ip.DstIP.String() + ":" + strconv.Itoa(dstProt)
+		}
+	}
+
+	if global.ExVar.BindIpInfo == true && global.OnlySrcIp != "" && global.OnlyDstIp != "" {
+		if global.OnlySrcIp != srcIP || global.OnlyDstIp != dstIP {
+			if global.IsDebug == true {
+				fmt.Println("IP信息不符合跳过数据处理")
+			}
+			return
+		}
+	}
+
+	if global.IsDebug == true {
+		fmt.Println("")
+		fmt.Println("====================================================")
+		fmt.Println("")
+	}
+	bufread := NewBufferFrom(buf)
+	bufsize := bufread.ReadInt()
+	if global.IsDebug == true {
+		fmt.Println("包大小", bufsize)
+	}
+	cmdId := bufread.ReadInt()
+	if global.IsDebug == true {
+		fmt.Println("协议号", cmdId)
+	}
+
+	if len(buf) > 14 {
+		if global.IsDebug == true {
+			fmt.Println("数据类型", buf[12])
+		}
+
+		if buf[12] == 3 {
+			//fmt.Println(len(buf), bufsize, cmdId, "-----------")
+			// 长度字段通常满足 bufsize+4==len(buf)；不等时仅对 103/92 大帧启用补帧
+			if len(buf)-bufsize != 4 && (cmdId == 103 || cmdId == 92) {
+				global.LossCmdId = cmdId
+				global.LossBytes = buf
+				global.PacketLoss = true
+				global.NeedBufSize = bufsize
+			} else {
+				go ParseData(cmdId, buf[17:])
+			}
+
+		} else if buf[12] == 5 {
+			//println(buf)
+			if global.IsDebug == true {
+				data := DecodeType5(buf[12:])
+				fmt.Println(data)
+			}
+		} else if buf[12] == 2 {
+
+			//if cmdId == 5028 || cmdId == 5026 {
+			//	fmt.Println(string(buf[12:]))
+			//}
+			//
+			//if cmdId == 5028 {
+			//	Parse5028(buf[13:])
+			//}
+		} else if cmdId > 99999 && global.PacketLoss == true && (global.LossCmdId == 103 || global.LossCmdId == 92) {
+			result := make([]byte, len(buf)+len(global.LossBytes))
+			copy(result, global.LossBytes)
+			copy(result[len(global.LossBytes):], buf)
+			if len(buf)+len(global.LossBytes)-global.NeedBufSize != 4 {
+				global.LossBytes = result
+			} else {
+				global.PacketLoss = false
+				go ParseData(global.LossCmdId, result[17:])
+			}
+
+		}
+
+		if cmdId == 3686 {
+			var data []byte
+			if buf[12] == 5 {
+				data = []byte(DecodeType5(buf[12:]))
+			} else if buf[12] == 3 {
+				data = parseZlibData(buf[17:])
+			}
+
+			if global.ExVar.NeedPushBookData {
+				go parseBookData(data)
+			}
+
+			if databaseSelected == false {
+				var raw []interface{}
+				err := json.Unmarshal([]byte(data), &raw)
+				if err != nil {
+					log.Fatal(err)
+				} else {
+					dataMap := raw[1].(map[string]interface{})
+					server, ok := dataMap["server"].([]interface{})
+					if ok {
+						log.Printf("服务器信息: %v\n", server)
+					}
+
+					var roleName string
+					if logData, ok := dataMap["log"].(map[string]interface{}); ok {
+						roleName = logData["role_name"].(string)
+						log.Printf("角色名: %s\n", roleName)
+					}
+
+					log.Println("本地IP：" + dstIP)
+					log.Println("游戏服务器IP：" + srcIP)
+					global.OnlySrcIp = srcIP
+					global.OnlyDstIp = dstIP
+					dabesename := roleName + "_" + server[0].(string)
+					log.Println("收到主公簿数据，将打开数据库文件" + dabesename + ".db")
+					model.InitDB(dabesename)
+					databaseSelected = true
+				}
+			}
+		}
+	}
+
+	if global.IsDebug == true {
+		fmt.Print("[]byte{")
+		for i, b := range buf {
+			if i > 0 {
+				fmt.Print(", ")
+			}
+			fmt.Print(b)
+		}
+		fmt.Println("}")
+		fmt.Println("")
+		fmt.Println("====================================================")
+		fmt.Println("")
 	}
 }
 
@@ -297,6 +292,9 @@ var (
 
 type clientStream struct {
 	buf []byte
+	// lastSeq/haveSeq：TCP 序号基线（buf[0] 对应 seq），用于多网卡重复抓包/重传去重
+	lastSeq uint64
+	haveSeq bool
 }
 
 const maxClientFrame = 8 * 1024 * 1024
@@ -309,8 +307,13 @@ func handleClientRequest(packet gopacket.Packet, payload []byte) {
 	}
 	streamKey := ""
 	serverAddr := ""
+	tcpSeq := uint64(0)
+	haveTcp := false
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-		streamKey = tcpLayer.(*layers.TCP).SrcPort.String() + "-" + tcpLayer.(*layers.TCP).DstPort.String()
+		tcp := tcpLayer.(*layers.TCP)
+		streamKey = tcp.SrcPort.String() + "-" + tcp.DstPort.String()
+		tcpSeq = uint64(tcp.Seq)
+		haveTcp = true
 	}
 	if ipLayer := packet.NetworkLayer(); ipLayer != nil {
 		dstPort := 0
@@ -331,12 +334,31 @@ func handleClientRequest(packet gopacket.Packet, payload []byte) {
 		st = &clientStream{}
 		clientStreams[streamKey] = st
 	}
+	// 多网卡重复抓包或 TCP 重传会产生同序号段，按 seq 去重，避免数据被重复追加导致帧错乱
+	if haveTcp {
+		if st.haveSeq {
+			covered := st.lastSeq + uint64(len(st.buf))
+			end := tcpSeq + uint64(len(payload))
+			if tcpSeq < covered {
+				if end <= covered {
+					clientStreamsMu.Unlock()
+					return
+				}
+				payload = payload[covered-tcpSeq:]
+			}
+		} else {
+			st.haveSeq = true
+			st.lastSeq = tcpSeq
+		}
+	}
 	st.buf = append(st.buf, payload...)
 	var frames [][]byte
 	for len(st.buf) >= 4 {
 		need := int(binary.BigEndian.Uint32(st.buf[0:4])) + 4
 		if need < 4 || need > maxClientFrame {
 			st.buf = []byte{}
+			st.lastSeq = 0
+			st.haveSeq = false
 			break
 		}
 		if len(st.buf) < need {
@@ -344,8 +366,12 @@ func handleClientRequest(packet gopacket.Packet, payload []byte) {
 		}
 		frames = append(frames, st.buf[:need])
 		st.buf = st.buf[need:]
+		st.lastSeq += uint64(need)
 	}
 	clientStreamsMu.Unlock()
+	if len(frames) == 0 {
+		return
+	}
 
 	for _, buf := range frames {
 		// 无条件缓存44871翻页模板（供直连重放）
@@ -377,18 +403,27 @@ var (
 
 type serverStream struct {
 	buf []byte
+	// lastSeq/haveSeq：TCP 序号基线（buf[0] 对应 seq），用于多网卡重复抓包/重传去重
+	lastSeq uint64
+	haveSeq bool
 }
 
-// handleServerResponse 服务器->客户端方向：按帧头长度字段[0:4]重组后落盘记录，
-// 与 requests_debug.log 时间戳对照即可确认 每个请求 -> 哪些响应cmd 的对应关系。
-func handleServerResponse(packet gopacket.Packet, payload []byte) {
+// handleServerResponse 服务器->客户端方向：按帧头长度字段[0:4]重组并返回完整帧，
+// 同时落盘记录（与 requests_debug.log 时间戳对照即可确认 每个请求 -> 哪些响应cmd 的对应关系）。
+// 主解析(handlePacket)与日志共用该重组结果，不再依赖 PSH 拼包。
+func handleServerResponse(packet gopacket.Packet, payload []byte) [][]byte {
 	if payload == nil || len(payload) == 0 {
-		return
+		return nil
 	}
 	streamKey := ""
 	serverAddr := ""
+	tcpSeq := uint64(0)
+	haveTcp := false
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-		streamKey = tcpLayer.(*layers.TCP).SrcPort.String() + "-" + tcpLayer.(*layers.TCP).DstPort.String()
+		tcp := tcpLayer.(*layers.TCP)
+		streamKey = tcp.SrcPort.String() + "-" + tcp.DstPort.String()
+		tcpSeq = uint64(tcp.Seq)
+		haveTcp = true
 	}
 	if ipLayer := packet.NetworkLayer(); ipLayer != nil {
 		srcPort := 0
@@ -409,12 +444,31 @@ func handleServerResponse(packet gopacket.Packet, payload []byte) {
 		st = &serverStream{}
 		serverStreams[streamKey] = st
 	}
+	// 多网卡重复抓包或 TCP 重传会产生同序号段，按 seq 去重，避免数据被重复追加导致 zlib 帧损坏
+	if haveTcp {
+		if st.haveSeq {
+			covered := st.lastSeq + uint64(len(st.buf))
+			end := tcpSeq + uint64(len(payload))
+			if tcpSeq < covered {
+				if end <= covered {
+					serverStreamsMu.Unlock()
+					return nil
+				}
+				payload = payload[covered-tcpSeq:]
+			}
+		} else {
+			st.haveSeq = true
+			st.lastSeq = tcpSeq
+		}
+	}
 	st.buf = append(st.buf, payload...)
 	var frames [][]byte
 	for len(st.buf) >= 4 {
 		need := int(binary.BigEndian.Uint32(st.buf[0:4])) + 4
 		if need < 4 || need > maxClientFrame {
 			st.buf = []byte{}
+			st.lastSeq = 0
+			st.haveSeq = false
 			break
 		}
 		if len(st.buf) < need {
@@ -422,12 +476,17 @@ func handleServerResponse(packet gopacket.Packet, payload []byte) {
 		}
 		frames = append(frames, st.buf[:need])
 		st.buf = st.buf[need:]
+		st.lastSeq += uint64(need)
 	}
 	serverStreamsMu.Unlock()
+	if len(frames) == 0 {
+		return nil
+	}
 
 	for _, buf := range frames {
 		logServerResponse(buf, serverAddr, streamKey)
 	}
+	return frames
 }
 
 var respLogMu sync.Mutex

@@ -771,6 +771,10 @@ func parsePowerRank(data []byte) {
 	if len(ranks) == 0 {
 		return
 	}
+	if model.Conn == nil {
+		log.Println("势力榜消息已解析但未写入：尚未连接数据库，请先在软件中选择数据库")
+		return
+	}
 	// 势力榜为整表快照：先清空再写入，避免残留旧榜数据
 	model.Conn.Where("rank > 0").Delete(&model.PowerRank{})
 	model.Conn.Create(&ranks)
