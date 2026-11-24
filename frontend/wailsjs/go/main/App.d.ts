@@ -81,6 +81,8 @@ export function GetMyUnionName():Promise<string>;
 
 export function GetPlayerTeam(arg1:string,arg2:string,arg3:number,arg4:number):Promise<string>;
 
+export function GetPowerRank():Promise<string>;
+
 export function GetReportNumByTaskId(arg1:number):Promise<string>;
 
 export function GetSiegeSummary():Promise<string>;

@@ -179,6 +179,8 @@ func ParseData(cmdId int, data []byte) {
 		}
 	} else if cmdId == 103 {
 		parseTeamUser(data)
+	} else if cmdId == 700 {
+		parsePowerRank(data)
 	} else if cmdId == 92 {
 		if global.ExVar.NeedGetBattleData || global.ExVar.NeedAutoScroll || global.ExVar.NeedAutoScrollDetect {
 			log.Println("已开启获取详细战报,目前会暂停考勤战报的获取")
@@ -753,6 +755,63 @@ func sumHeroHpAfter(info string) int {
 		}
 	}
 	return total
+}
+
+// parsePowerRank 解析 cmd=700 势力榜：全量替换本地 power_rank 表(300条/页)
+// 响应结构 [0,-1,{自己},300,[[0,{条目}],...],null,{土地id:等级}]，末段数字键 dict 非标准 JSON，截断后解析
+func parsePowerRank(data []byte) {
+	log.Println("收到势力榜消息")
+	msgdata := parseZlibData(data)
+	ranks, err := extractPowerRank(msgdata)
+	if err != nil {
+		log.Println("解析势力榜消息失败:", err)
+		return
+	}
+	log.Println("势力榜消息解析成功！共" + strconv.Itoa(len(ranks)) + "条")
+	if len(ranks) == 0 {
+		return
+	}
+	// 势力榜为整表快照：先清空再写入，避免残留旧榜数据
+	model.Conn.Where("rank > 0").Delete(&model.PowerRank{})
+	model.Conn.Create(&ranks)
+}
+
+// extractPowerRank 从 cmd=700 原始字节(zlib 已解压)提取势力榜条目。
+// 响应结构 [0,-1,{自己},300,[[0,{条目}],...],null,{土地id:等级}]，
+// 末段数字键 dict({13826:1,...}) 非标准 JSON，先截断再解析。
+func extractPowerRank(msgdata []byte) ([]model.PowerRank, error) {
+	if len(msgdata) == 0 {
+		return nil, fmt.Errorf("数据为空")
+	}
+	if idx := bytes.LastIndex(msgdata, []byte("],null,{")); idx > 0 {
+		msgdata = append(msgdata[:idx+1], ']')
+	}
+
+	var raw []interface{}
+	if err := json.Unmarshal(msgdata, &raw); err != nil {
+		return nil, err
+	}
+	if len(raw) < 5 {
+		return nil, fmt.Errorf("结构不完整")
+	}
+	entriesRaw, ok := raw[4].([]interface{})
+	if !ok {
+		return nil, fmt.Errorf("缺少条目列表")
+	}
+
+	var ranks []model.PowerRank
+	for _, item := range entriesRaw {
+		pair, ok := item.([]interface{})
+		if !ok || len(pair) < 2 {
+			continue
+		}
+		ent, ok := pair[1].(map[string]interface{})
+		if !ok {
+			continue
+		}
+		ranks = append(ranks, model.ToPowerRank(len(ranks)+1, ent))
+	}
+	return ranks, nil
 }
 
 // parseZlibData 解压 zlib 数据

@@ -13,6 +13,7 @@ import Book from './pages/Book.vue';
 import Dashboard from './pages/Dashboard.vue';
 import Activity from './pages/MemberActivity.vue';
 import HotRank from './pages/HotRank.vue';
+import PowerRank from './pages/PowerRank.vue';
 import TeamCounter from './pages/TeamCounter.vue';
 import TeamWinRate from './pages/TeamWinRate.vue';
 import LongShiHelper from './pages/LongShiHelper.vue';
@@ -108,6 +109,12 @@ const routes = [
         name: 'hotrank',
         component: HotRank,
         meta: { title: '热门排行' }
+    },
+    {
+        path: '/powerrank',
+        name: 'powerrank',
+        component: PowerRank,
+        meta: { title: '势力榜' }
     },
     {
         path: '/teamcounter',

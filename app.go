@@ -64,6 +64,13 @@ func (a *App) GetTeamGroup() string {
 	return global.Response{Data: groups}.Success()
 }
 
+// GetPowerRank 获取势力榜数据(本地 power_rank 表)
+func (a *App) GetPowerRank() string {
+	var ranks []model.PowerRank
+	model.Conn.Order("rank asc").Find(&ranks)
+	return global.Response{Data: ranks}.Success()
+}
+
 // CreateTask 创建攻城任务
 func (a *App) CreateTask(name string, tasktime int, target []string, taskpos []string) string {
 	task := model.Task{

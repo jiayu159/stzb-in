@@ -112,6 +112,11 @@ const menuOptions = [
         icon: renderIcon(Shield)
     },
     {
+        label: '势力榜',
+        key: 'powerrank',
+        icon: renderIcon(Trophy)
+    },
+    {
         label: '队伍克制',
         key: 'teamcounter',
         icon: renderIcon(Crosshair)

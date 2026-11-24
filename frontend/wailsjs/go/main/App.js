@@ -162,6 +162,10 @@ export function GetPlayerTeam(arg1, arg2, arg3, arg4) {
   return window['go']['main']['App']['GetPlayerTeam'](arg1, arg2, arg3, arg4);
 }
 
+export function GetPowerRank() {
+  return window['go']['main']['App']['GetPowerRank']();
+}
+
 export function GetReportNumByTaskId(arg1) {
   return window['go']['main']['App']['GetReportNumByTaskId'](arg1);
 }

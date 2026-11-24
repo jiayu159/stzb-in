@@ -24,7 +24,7 @@ func InitDB(databasePath string) {
 		return
 	}
 
-	err = db.AutoMigrate(&TeamUser{}, &Task{}, &Report{}, &BattleReport{})
+	err = db.AutoMigrate(&TeamUser{}, &Task{}, &Report{}, &BattleReport{}, &PowerRank{})
 	if err != nil {
 		log.Println("数据库迁移失败:", err)
 		return
