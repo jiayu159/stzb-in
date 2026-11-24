@@ -10,6 +10,7 @@ import (
 	"github.com/google/gopacket/pcap"
 	"log"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 	"stzbHelper/global"
@@ -282,22 +283,135 @@ type Buffer struct {
 // ---------------- 客户端->服务器 请求方向处理（协议分析用） ----------------
 
 var (
-	clientReqFullbuf = []byte{}
-	clientReqWait    = false
-
-	// 按连接(5元组)分组重组的客户端请求流，避免多连接交错搅乱帧
+	// 按连接(完整四元组 srcIP:srcPort-dstIP:dstPort)分组重组的客户端请求流，避免多连接交错搅乱帧
 	clientStreamsMu sync.Mutex
-	clientStreams   = map[string]*clientStream{}
+	clientStreams   = map[string]*frameStream{}
 )
 
-type clientStream struct {
-	buf []byte
-	// lastSeq/haveSeq：TCP 序号基线（buf[0] 对应 seq），用于多网卡重复抓包/重传去重
-	lastSeq uint64
-	haveSeq bool
+const maxClientFrame = 8 * 1024 * 1024
+
+// frameStream 按 TCP 序号重组应用层帧：
+// 每个 TCP 段按 seq 存表，重组时先排序合并重叠/邻接区间，再按帧头[0:4]长度字段切帧。
+// 正确处理：多网卡重复抓包/重传(同seq或部分重叠)、TCP 段乱序(低seq段晚到不会被误删)、
+// 已切出帧的旧段晚到(consumed 记录后直接丢弃，不会重复切帧)。
+// 流内锁由调用方的 clientStreamsMu/serverStreamsMu 保证。
+type frameStream struct {
+	segs     map[uint64][]byte // seq -> 段数据
+	consumed uint64            // 已切出帧所占用的最大末端 seq
+	haveCons bool              // 是否已切出过帧（consumed 有效）
+	segLens  uint64            // segs 缓冲总字节数，防 pcap 永久丢段时无限累积
 }
 
-const maxClientFrame = 8 * 1024 * 1024
+func newFrameStream() *frameStream {
+	return &frameStream{segs: make(map[uint64][]byte)}
+}
+
+// push 插入一个 TCP 段并尝试切出完整帧（每帧均为独立副本，可安全交给异步 goroutine）
+func (fs *frameStream) push(seq uint64, payload []byte) [][]byte {
+	if len(payload) == 0 {
+		return nil
+	}
+	if fs.haveCons {
+		end := seq + uint64(len(payload))
+		if end <= fs.consumed {
+			// 整段都是已切出帧的旧数据（双网卡/重传晚到），丢弃
+			return nil
+		}
+		if seq < fs.consumed {
+			// 部分重叠：裁掉已消费部分，只留新尾部（通常正好接在新帧头之后）
+			payload = payload[fs.consumed-seq:]
+			seq = fs.consumed
+		}
+	}
+	// 同 seq 段：保留更长的一份（多网卡/重传重复）
+	if old, ok := fs.segs[seq]; ok && len(old) >= len(payload) {
+		return fs.reassemble()
+	}
+	// 防无限累积：pcap 丢段形成缺口且永远补不上时，缓冲超过上限即放弃该流
+	if fs.segLens+uint64(len(payload)) > maxClientFrame*2 {
+		fs.segs = make(map[uint64][]byte)
+		fs.segLens = 0
+		return nil
+	}
+	fs.segs[seq] = append([]byte(nil), payload...)
+	fs.segLens += uint64(len(payload))
+	return fs.reassemble()
+}
+
+// reassemble 排序合并所有段，切出完整帧；不足一帧的剩余数据放回段表等待后续段
+func (fs *frameStream) reassemble() [][]byte {
+	type seg struct {
+		seq  uint64
+		end  uint64
+		data []byte
+	}
+	arr := make([]seg, 0, len(fs.segs))
+	for seq, data := range fs.segs {
+		arr = append(arr, seg{seq, seq + uint64(len(data)), data})
+	}
+	sort.Slice(arr, func(i, j int) bool { return arr[i].seq < arr[j].seq })
+
+	// 合并重叠/邻接区间：seq 升序，重叠部分取 prior 段的字节（重复抓包内容一致）
+	var merged []seg
+	for _, a := range arr {
+		if len(merged) > 0 && a.seq <= merged[len(merged)-1].end {
+			tail := &merged[len(merged)-1]
+			if a.end > tail.end {
+				tail.data = append(tail.data, a.data[tail.end-a.seq:]...)
+				tail.end = a.end
+			}
+		} else {
+			merged = append(merged, a)
+		}
+	}
+
+	var frames [][]byte
+	fs.segs = make(map[uint64][]byte)
+	fs.segLens = 0
+	for i, m := range merged {
+		// 只有最小 seq 的区间(前方无缺口、无更早段)才可能含有真正帧头，允许切帧；
+		// 其余区间前方数据未到/有缺口，切帧结果不可信，原样放回等待补全。
+		if i != 0 {
+			fs.segs[m.seq] = m.data
+			fs.segLens += uint64(len(m.data))
+			continue
+		}
+		rest := m.data
+		restSeq := m.seq
+		for len(rest) >= 4 {
+			need := int(binary.BigEndian.Uint32(rest[0:4])) + 4
+			if need < 4 || need > maxClientFrame {
+				// 该起点不是合法帧头。可能原因：乱序时先到的是帧中间段（数据完好，
+				// 只是起点不在帧边界），真正的帧头段尚未捕获。不丢弃：放回段表等它。
+				// 防卡死：连续数据远超最大帧长却仍是坏帧头，说明流已损坏，清掉重来。
+				if len(rest) > maxClientFrame*2 {
+					fs.segLens = 0
+					return frames
+				}
+				fs.segs[restSeq] = rest
+				fs.segLens += uint64(len(rest))
+				rest = nil
+				break
+			}
+			if len(rest) < need {
+				break
+			}
+			frames = append(frames, append([]byte(nil), rest[:need]...))
+			rest = rest[need:]
+			restSeq += uint64(need)
+			// 记录已切出帧的末端 seq，晚到的同段/重叠旧数据直接丢弃（防双网卡重复切帧）
+			if !fs.haveCons || restSeq > fs.consumed {
+				fs.consumed = restSeq
+				fs.haveCons = true
+			}
+		}
+		if len(rest) > 0 {
+			fs.segs[restSeq] = rest
+			fs.segLens += uint64(len(rest))
+		}
+	}
+	return frames
+}
 
 // handleClientRequest 客户端->服务器方向：按帧头长度字段[0:4]重组(总长=长度+4)，
 // 不依赖PSH，多分片/多帧合并均正确处理；按连接分组避免多连接交错。
@@ -308,66 +422,41 @@ func handleClientRequest(packet gopacket.Packet, payload []byte) {
 	streamKey := ""
 	serverAddr := ""
 	tcpSeq := uint64(0)
-	haveTcp := false
+	isSyn := false
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		tcp := tcpLayer.(*layers.TCP)
-		streamKey = tcp.SrcPort.String() + "-" + tcp.DstPort.String()
 		tcpSeq = uint64(tcp.Seq)
-		haveTcp = true
+		isSyn = tcp.SYN
+		srcIP, dstIP := "", ""
+		if ipLayer := packet.NetworkLayer(); ipLayer != nil {
+			switch ip := ipLayer.(type) {
+			case *layers.IPv4:
+				srcIP, dstIP = ip.SrcIP.String(), ip.DstIP.String()
+			case *layers.IPv6:
+				srcIP, dstIP = ip.SrcIP.String(), ip.DstIP.String()
+			}
+		}
+		// 完整四元组做流 key，避免不同服务器/端口复用连接串流
+		streamKey = srcIP + ":" + tcp.SrcPort.String() + "-" + dstIP + ":" + tcp.DstPort.String()
+		serverAddr = dstIP + ":" + tcp.DstPort.String()
 	}
-	if ipLayer := packet.NetworkLayer(); ipLayer != nil {
-		dstPort := 0
-		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-			dstPort = int(tcpLayer.(*layers.TCP).DstPort)
-		}
-		switch ip := ipLayer.(type) {
-		case *layers.IPv4:
-			serverAddr = ip.DstIP.String() + ":" + strconv.Itoa(dstPort)
-		case *layers.IPv6:
-			serverAddr = ip.DstIP.String() + ":" + strconv.Itoa(dstPort)
-		}
+	if streamKey == "" {
+		return
 	}
 
 	clientStreamsMu.Lock()
+	if isSyn {
+		// 新连接(SYN/SYN-ACK)：清掉旧连接重组状态，防止端口复用后旧 seq 基线污染新连接
+		delete(clientStreams, streamKey)
+		clientStreamsMu.Unlock()
+		return
+	}
 	st, ok := clientStreams[streamKey]
 	if !ok {
-		st = &clientStream{}
+		st = newFrameStream()
 		clientStreams[streamKey] = st
 	}
-	// 多网卡重复抓包或 TCP 重传会产生同序号段，按 seq 去重，避免数据被重复追加导致帧错乱
-	if haveTcp {
-		if st.haveSeq {
-			covered := st.lastSeq + uint64(len(st.buf))
-			end := tcpSeq + uint64(len(payload))
-			if tcpSeq < covered {
-				if end <= covered {
-					clientStreamsMu.Unlock()
-					return
-				}
-				payload = payload[covered-tcpSeq:]
-			}
-		} else {
-			st.haveSeq = true
-			st.lastSeq = tcpSeq
-		}
-	}
-	st.buf = append(st.buf, payload...)
-	var frames [][]byte
-	for len(st.buf) >= 4 {
-		need := int(binary.BigEndian.Uint32(st.buf[0:4])) + 4
-		if need < 4 || need > maxClientFrame {
-			st.buf = []byte{}
-			st.lastSeq = 0
-			st.haveSeq = false
-			break
-		}
-		if len(st.buf) < need {
-			break
-		}
-		frames = append(frames, st.buf[:need])
-		st.buf = st.buf[need:]
-		st.lastSeq += uint64(need)
-	}
+	frames := st.push(tcpSeq, payload)
 	clientStreamsMu.Unlock()
 	if len(frames) == 0 {
 		return
@@ -397,19 +486,14 @@ var reqLogMu sync.Mutex
 // ---------------- 服务器->客户端 响应方向处理（协议分析用） ----------------
 
 var (
+	// 按连接(完整四元组 srcIP:srcPort-dstIP:dstPort)分组重组的服务器响应流
 	serverStreamsMu sync.Mutex
-	serverStreams   = map[string]*serverStream{}
+	serverStreams   = map[string]*frameStream{}
 )
 
-type serverStream struct {
-	buf []byte
-	// lastSeq/haveSeq：TCP 序号基线（buf[0] 对应 seq），用于多网卡重复抓包/重传去重
-	lastSeq uint64
-	haveSeq bool
-}
-
-// handleServerResponse 服务器->客户端方向：按帧头长度字段[0:4]重组并返回完整帧，
-// 同时落盘记录（与 requests_debug.log 时间戳对照即可确认 每个请求 -> 哪些响应cmd 的对应关系）。
+// handleServerResponse 服务器->客户端方向：按 TCP 序号重组(乱序/重复/部分重叠安全)，
+// 再按帧头长度字段[0:4]切帧并返回完整帧，同时落盘记录（与 requests_debug.log 时间戳对照
+// 即可确认 每个请求 -> 哪些响应cmd 的对应关系）。
 // 主解析(handlePacket)与日志共用该重组结果，不再依赖 PSH 拼包。
 func handleServerResponse(packet gopacket.Packet, payload []byte) [][]byte {
 	if payload == nil || len(payload) == 0 {
@@ -418,66 +502,41 @@ func handleServerResponse(packet gopacket.Packet, payload []byte) [][]byte {
 	streamKey := ""
 	serverAddr := ""
 	tcpSeq := uint64(0)
-	haveTcp := false
+	isSyn := false
 	if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
 		tcp := tcpLayer.(*layers.TCP)
-		streamKey = tcp.SrcPort.String() + "-" + tcp.DstPort.String()
 		tcpSeq = uint64(tcp.Seq)
-		haveTcp = true
+		isSyn = tcp.SYN
+		srcIP, dstIP := "", ""
+		if ipLayer := packet.NetworkLayer(); ipLayer != nil {
+			switch ip := ipLayer.(type) {
+			case *layers.IPv4:
+				srcIP, dstIP = ip.SrcIP.String(), ip.DstIP.String()
+			case *layers.IPv6:
+				srcIP, dstIP = ip.SrcIP.String(), ip.DstIP.String()
+			}
+		}
+		// 完整四元组做流 key，避免不同服务器/端口复用连接串流
+		streamKey = srcIP + ":" + tcp.SrcPort.String() + "-" + dstIP + ":" + tcp.DstPort.String()
+		serverAddr = srcIP + ":" + tcp.SrcPort.String()
 	}
-	if ipLayer := packet.NetworkLayer(); ipLayer != nil {
-		srcPort := 0
-		if tcpLayer := packet.Layer(layers.LayerTypeTCP); tcpLayer != nil {
-			srcPort = int(tcpLayer.(*layers.TCP).SrcPort)
-		}
-		switch ip := ipLayer.(type) {
-		case *layers.IPv4:
-			serverAddr = ip.SrcIP.String() + ":" + strconv.Itoa(srcPort)
-		case *layers.IPv6:
-			serverAddr = ip.SrcIP.String() + ":" + strconv.Itoa(srcPort)
-		}
+	if streamKey == "" {
+		return nil
 	}
 
 	serverStreamsMu.Lock()
+	if isSyn {
+		// 新连接(SYN/SYN-ACK)：清掉旧连接重组状态，防止端口复用后旧 seq 基线污染新连接
+		delete(serverStreams, streamKey)
+		serverStreamsMu.Unlock()
+		return nil
+	}
 	st, ok := serverStreams[streamKey]
 	if !ok {
-		st = &serverStream{}
+		st = newFrameStream()
 		serverStreams[streamKey] = st
 	}
-	// 多网卡重复抓包或 TCP 重传会产生同序号段，按 seq 去重，避免数据被重复追加导致 zlib 帧损坏
-	if haveTcp {
-		if st.haveSeq {
-			covered := st.lastSeq + uint64(len(st.buf))
-			end := tcpSeq + uint64(len(payload))
-			if tcpSeq < covered {
-				if end <= covered {
-					serverStreamsMu.Unlock()
-					return nil
-				}
-				payload = payload[covered-tcpSeq:]
-			}
-		} else {
-			st.haveSeq = true
-			st.lastSeq = tcpSeq
-		}
-	}
-	st.buf = append(st.buf, payload...)
-	var frames [][]byte
-	for len(st.buf) >= 4 {
-		need := int(binary.BigEndian.Uint32(st.buf[0:4])) + 4
-		if need < 4 || need > maxClientFrame {
-			st.buf = []byte{}
-			st.lastSeq = 0
-			st.haveSeq = false
-			break
-		}
-		if len(st.buf) < need {
-			break
-		}
-		frames = append(frames, st.buf[:need])
-		st.buf = st.buf[need:]
-		st.lastSeq += uint64(need)
-	}
+	frames := st.push(tcpSeq, payload)
 	serverStreamsMu.Unlock()
 	if len(frames) == 0 {
 		return nil
