@@ -185,8 +185,12 @@ func ParseData(cmdId int, data []byte) {
 		if global.ExVar.NeedGetBattleData || global.ExVar.NeedAutoScroll || global.ExVar.NeedAutoScrollDetect {
 			log.Println("已开启获取详细战报,目前会暂停考勤战报的获取")
 			parseBattleData(data)
-		} else {
+		} else if global.ExVar.NeedGetReport || global.ExVar.NeedAutoListenReport {
 			parseReport(data)
+		} else {
+			// 未开启任何开关时也入库详细战报：前端已无考勤开关入口(NeedGetReport/NeedAutoListenReport 恒为 false)，
+			// 若此处丢弃会导致 npcap 抓包得到的 cmd=92 数据全部丢失（“战报获取灵敏度低”根因）
+			parseBattleData(data)
 		}
 	}
 }

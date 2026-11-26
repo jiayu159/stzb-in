@@ -1408,9 +1408,8 @@ func (a *App) GetBattleReports(name string, minHp int, fightType int, myUnion st
 }
 
 // GetSiegeSummary 攻城战报全局汇总（按地点索引自动分类）
-// 行=参战角色(角色ID/名字/分组)，列=每个地点一个索引块(出勤/灭敌数/拆迁值/战报数)
+// 行=参战角色(角色ID/名字/分组)，列=每个地点一个索引块(出勤/灭敌数/战报数)
 // 灭敌数=防守方兵力变化(战前defend_hp-战后defend_hp_after，旧库无战后列则为0，不降级为战报条数)
-// 拆迁值=累加耐久下降(durability)，不再用战报条数近似
 // 数据源：battle_report(详细战报) 与 reports(攻城考勤战报) 合并
 // 地点索引自动分类：
 //   - 中文汉字名称（"内黄"/"营陵"等，归一化去掉坐标/等级/括号后缀）作为独立索引列
@@ -1486,24 +1485,14 @@ func (a *App) GetSiegeSummary() string {
 	}
 
 	type aggRow struct {
-		AttackName    string
-		AttackRoleID  string
-		CityName      string
-		Cnt           int64
-		KillCnt       int64
-		DurabilitySum int64
+		AttackName   string
+		AttackRoleID string
+		CityName     string
+		Cnt          int64
+		KillCnt      int64
 	}
-	// durability/defend_hp_after 列由新版本首次启动 AutoMigrate 补齐；旧库可能缺失，动态判断
+	// defend_hp_after 列由新版本首次启动 AutoMigrate 补齐；旧库可能缺失，动态判断
 	// 灭敌数：按防守方兵力变化(战前defend_hp-战后defend_hp_after)统计，不降级为战报条数
-	// 拆迁值：只累加耐久下降(durability)，不再用战报条数近似
-	durExprBR := "0"
-	if hasColumn("battle_report", "durability") {
-		durExprBR = "COALESCE(SUM(durability), 0)"
-	}
-	durExprR := "0"
-	if hasColumn("reports", "durability") {
-		durExprR = "COALESCE(SUM(durability), 0)"
-	}
 	killExprBR := "0"
 	if hasColumn("battle_report", "defend_hp_after") {
 		killExprBR = "COALESCE(SUM(CASE WHEN defend_hp >= defend_hp_after THEN defend_hp - defend_hp_after ELSE defend_hp END), 0)"
@@ -1515,25 +1504,22 @@ func (a *App) GetSiegeSummary() string {
 	var aggs []aggRow
 	model.Conn.Raw(`SELECT attack_name, '' AS attack_role_id, wid_name AS city_name,
 		COUNT(*) AS cnt,
-		`+killExprBR+` AS kill_cnt,
-		`+durExprBR+` AS durability_sum
+		`+killExprBR+` AS kill_cnt
 		FROM battle_report WHERE attack_name != '' AND wid_name != ''
 		AND attack_name IN (SELECT name FROM team_user WHERE name != '')
 		GROUP BY attack_name, wid_name
 		UNION ALL
 		SELECT attack_name, attack_role_id, ` + cityExpr + ` AS city_name,
 		COUNT(*) AS cnt,
-		`+killExprR+` AS kill_cnt,
-		`+durExprR+` AS durability_sum
+		`+killExprR+` AS kill_cnt
 		FROM reports WHERE attack_name != '' AND ` + cityExpr + ` != ''
 		AND attack_name IN (SELECT name FROM team_user WHERE name != '')
 		GROUP BY attack_name, attack_role_id, ` + cityExpr).Scan(&aggs)
 
 	type CityStat struct {
-		Present  bool `json:"present"`
-		Kill     int  `json:"kill"`
-		Demolish int  `json:"demolish"`
-		Reports  int  `json:"reports"`
+		Present bool `json:"present"`
+		Kill    int  `json:"kill"`
+		Reports int  `json:"reports"`
 	}
 	type Row struct {
 		RoleId string                `json:"role_id"`
@@ -1569,7 +1555,6 @@ func (a *App) GetSiegeSummary() string {
 		stat.Present = true
 		stat.Kill += int(agg.KillCnt)
 		stat.Reports += int(agg.Cnt)
-		stat.Demolish += int(agg.DurabilitySum)
 	}
 
 	return global.Response{Data: map[string]interface{}{

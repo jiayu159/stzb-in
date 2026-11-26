@@ -55,14 +55,13 @@ const visibleRows = computed(() => {
     return siegeRows.value.filter(r => r.group === siegeGroupFilter.value)
 })
 
-// 单元格渲染：出勤/灭敌/拆迁/战报
+// 单元格渲染：出勤/灭敌/战报
 const renderCityCell = (row, city) => {
     const s = (row.cities && row.cities[city.name]) || null
     if (!s) return h('div', { class: 'siege-cell empty' }, '—')
     return h('div', { class: 'siege-cell' }, [
         h('div', { class: 'cell-present' }, s.present ? '出勤' : '—'),
         h('div', {}, '灭敌 ' + (s.kill || 0)),
-        h('div', {}, '拆迁 ' + (s.demolish || 0)),
         h('div', {}, '战报 ' + (s.reports || 0)),
     ])
 }
@@ -89,11 +88,10 @@ const siegeColumns = computed(() => {
 })
 
 // 导出子类勾选（默认全部）
-const siegeExportSubs = ref(['present', 'kill', 'demolish', 'reports'])
+const siegeExportSubs = ref(['present', 'kill', 'reports'])
 const siegeExportSubOptions = [
     { label: '出勤', value: 'present' },
     { label: '灭敌', value: 'kill' },
-    { label: '拆迁', value: 'demolish' },
     { label: '战报数', value: 'reports' },
 ]
 
@@ -114,7 +112,7 @@ const loadSiegeSummary = () => {
     })
 }
 
-const siegeSubMeta = { present: '出勤', kill: '灭敌', demolish: '拆迁', reports: '战报数' }
+const siegeSubMeta = { present: '出勤', kill: '灭敌', reports: '战报数' }
 
 // 导出：cities=要导出的地点索引列表，rows=要导出的成员行
 const writeSiegeXlsx = (cities, rows, sheetName, filename) => {
@@ -189,11 +187,10 @@ const HEADER_RULES = [
     { role: 'group', contains: ['分组', '联盟', '同盟', '组别'], exact: ['group'] },
     { role: 'reports', contains: ['战报', '次数', '数量'], exact: ['reports', 'count', 'times'] },
     { role: 'kill', contains: ['灭敌', '杀敌', '击杀', '消灭'], exact: ['kill'] },
-    { role: 'demolish', contains: ['拆迁', '耐久'], exact: ['demolish', 'durability'] },
     { role: 'present', contains: ['出勤', '是否'], exact: ['present'] },
     { role: 'location', contains: ['地点', '城池', '位置', '坐标', '索引', '地名', '城市', '城址', '城名'], exact: ['城', 'location', 'city', 'cityname', 'loc', 'place'] },
 ]
-const SUB_ALIAS = { '出勤': 'present', '灭敌': 'kill', '杀敌': 'kill', '拆迁': 'demolish', '耐久': 'demolish', '战报': 'reports', '战报数': 'reports', '次数': 'reports' }
+const SUB_ALIAS = { '出勤': 'present', '灭敌': 'kill', '杀敌': 'kill', '战报': 'reports', '战报数': 'reports', '次数': 'reports' }
 
 const detectHeaderRole = (h) => {
     for (const rule of HEADER_RULES) {
@@ -216,7 +213,7 @@ const sortCitiesCn = (cities) => {
 }
 
 const parseSiegeImport = (sheetRows) => {
-    const MATRIX_RE = /^(.*?)[-－–—](出勤|灭敌|杀敌|拆迁|耐久|战报数?|次数)$/
+    const MATRIX_RE = /^(.*?)[-－–—](出勤|灭敌|杀敌|战报数?|次数)$/
     const isMatrixHeader = (h) => { const m = h.match(MATRIX_RE); return !!(m && SUB_ALIAS[m[2]]) }
     // 定位表头行：跳过标题/空行，取第一个含关键列（成员/地点/矩阵列）的非空行
     let hi = -1
@@ -232,7 +229,7 @@ const parseSiegeImport = (sheetRows) => {
         })
         if (critical) hi = i
     }
-    if (hi < 0) throw new Error('未找到表头行；表格需包含「成员（角色ID/名字/进攻方）+ 地点」列，或「地点-出勤/灭敌/拆迁/战报」矩阵表头')
+    if (hi < 0) throw new Error('未找到表头行；表格需包含「成员（角色ID/名字/进攻方）+ 地点」列，或「地点-出勤/灭敌/战报」矩阵表头')
     const header = (sheetRows[hi] || []).map(cellText)
     const roleByCol = {}
     const matrixCols = []
@@ -248,7 +245,7 @@ const parseSiegeImport = (sheetRows) => {
     }
     const colOf = (role) => Number(Object.keys(roleByCol).find(c => roleByCol[c] === role))
     const idCol = colOf('roleId'), nameCol = colOf('name'), groupCol = colOf('group')
-    const locCol = colOf('location'), killCol = colOf('kill'), demolishCol = colOf('demolish'), reportsCol = colOf('reports')
+    const locCol = colOf('location'), killCol = colOf('kill'), reportsCol = colOf('reports')
     const hasMemberCol = !isNaN(idCol) || !isNaN(nameCol)
     if (!hasMemberCol) throw new Error('未识别到成员列（表头需包含「角色ID」或「名字/昵称」）')
     const dataRows = sheetRows.slice(hi + 1)
@@ -271,17 +268,16 @@ const parseSiegeImport = (sheetRows) => {
                 const v = cellText(r[mc.col])
                 if (!v) continue
                 hasAny = true
-                const st = row.cities[mc.index] || (row.cities[mc.index] = { present: false, kill: 0, demolish: 0, reports: 0 })
+                const st = row.cities[mc.index] || (row.cities[mc.index] = { present: false, kill: 0, reports: 0 })
                 if (mc.sub === 'present') st.present = !cellNoish(v)
                 else if (mc.sub === 'kill') st.kill += cellInt(v)
-                else if (mc.sub === 'demolish') st.demolish += cellInt(v)
                 else st.reports += cellInt(v)
             }
             if (!hasAny) rowsMap.delete(key)
         }
         // 只有出勤列是「否」、但其他子类有数值时仍算到场
         for (const row of rowsMap.values()) {
-            Object.values(row.cities).forEach(st => { if (!st.present && (st.kill || st.demolish || st.reports)) st.present = true })
+            Object.values(row.cities).forEach(st => { if (!st.present && (st.kill || st.reports)) st.present = true })
         }
         return { cities: sortCitiesCn(cities), rows: [...rowsMap.values()] }
     }
@@ -307,7 +303,6 @@ const parseSiegeImport = (sheetRows) => {
                 role_id: roleId, name, group: !isNaN(groupCol) ? cellText(r[groupCol]) : '',
                 loc,
                 kill: !isNaN(killCol) ? cellInt(r[killCol]) : 0,
-                demolish: !isNaN(demolishCol) ? cellInt(r[demolishCol]) : 0,
                 reports: !isNaN(reportsCol) ? Math.max(cellInt(r[reportsCol]), 1) : 1,
             })
         }
@@ -316,10 +311,9 @@ const parseSiegeImport = (sheetRows) => {
             const key = it.role_id ? 'id:' + it.role_id : 'name:' + it.name
             let row = memberMap.get(key)
             if (!row) { row = { role_id: it.role_id, name: it.name, group: it.group, cities: {} }; memberMap.set(key, row) }
-            const st = row.cities[it.loc] || (row.cities[it.loc] = { present: true, kill: 0, demolish: 0, reports: 0 })
+            const st = row.cities[it.loc] || (row.cities[it.loc] = { present: true, kill: 0, reports: 0 })
             st.present = true
             st.kill += it.kill
-            st.demolish += it.demolish
             st.reports += it.reports
         }
         return { cities: sortCitiesCn(cities), rows: [...memberMap.values()] }
@@ -382,9 +376,9 @@ onMounted(() => {
                     <h2 class="page-title">攻城汇总</h2>
                     <p class="page-desc">
                         统计当前同盟成员的攻城战报：每个成员在每座城的
-                        <b>出勤</b>（是否攻击该城）、<b>灭敌数</b>（防守方兵力变化：战前−战后）、<b>拆迁值</b>（耐久下降累加）、<b>战报数</b>。
+                        <b>出勤</b>（是否攻击该城）、<b>灭敌数</b>（防守方兵力变化：战前−战后）、<b>战报数</b>。
                         <br/>地点索引自动分类：<b>中文汉字名称</b>（内黄/营陵等）作为独立列，其余（<b>数字坐标</b>之类）统一归入「其他」列；索引列标有「(其他)」后缀。
-                        <br/>自动识别不理想时，可点「<b>导入表格</b>」手动导入 Excel/CSV 解析：支持「成员+地点+灭敌/拆迁/战报」明细表、导出的「地点-出勤/灭敌/拆迁/战报」矩阵表，以及游戏「同盟战报」导出（进攻方/地点/结果，按成员+地点统计到场与战报数）。
+                        <br/>自动识别不理想时，可点「<b>导入表格</b>」手动导入 Excel/CSV 解析：支持「成员+地点+灭敌/战报」明细表、导出的「地点-出勤/灭敌/战报」矩阵表，以及游戏「同盟战报」导出（进攻方/地点/结果，按成员+地点统计到场与战报数）。
                     </p>
                     <div v-if="dataSource === 'import'" class="import-banner">
                         <span>
