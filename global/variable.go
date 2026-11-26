@@ -24,6 +24,9 @@ type WebExVar struct {
 
 var ExVar = WebExVar{
 	NeededReportEndTime: 0,
+	// 详细战报抓取默认开启：同盟战报栏开关默认处于"获取详细战报"状态，
+	// 保证启动后 npcap 抓到的 cmd=92 战报直接入库(详见 ParseData 分流与前端开关恢复逻辑)
+	NeedGetBattleData: true,
 }
 
 var IsDebug bool = false
