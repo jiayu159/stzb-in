@@ -67,7 +67,7 @@ const menuOptions = [
         icon: renderIcon(Users)
     },
     {
-        label: '攻城任务',
+        label: '攻城汇总',
         key: 'task',
         icon: renderIcon(ClipboardList)
     },

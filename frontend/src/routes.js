@@ -36,7 +36,7 @@ const routes = [
         path: '/task',
         name: 'task',
         component: Task,
-        meta: { title: '攻城任务' }
+        meta: { title: '攻城汇总' }
     },
     {
         path: '/battleReports',

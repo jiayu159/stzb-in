@@ -1407,57 +1407,73 @@ func (a *App) GetBattleReports(name string, minHp int, fightType int, myUnion st
 	}}.Success()
 }
 
-// GetSiegeSummary 攻城战报全局汇总（不绑定任务）
-// 行=参战角色(角色ID/名字/分组)，列=每个城池一个子块(出勤/灭敌数/拆迁值/战报数)
+// GetSiegeSummary 攻城战报全局汇总（按地点索引自动分类）
+// 行=参战角色(角色ID/名字/分组)，列=每个地点一个索引块(出勤/灭敌数/拆迁值/战报数)
 // 灭敌数=防守方兵力变化(战前defend_hp-战后defend_hp_after，旧库无战后列则为0，不降级为战报条数)
 // 拆迁值=累加耐久下降(durability)，不再用战报条数近似
 // 数据源：battle_report(详细战报) 与 reports(攻城考勤战报) 合并
-// 城池匹配：战报地点归一化后命中"三国城池名单 ∪ 攻城任务名"才计为城池列；未命中的地点(沃土/土地/营垒等)统一归入"其他"
+// 地点索引自动分类：
+//   - 中文汉字名称（"内黄"/"营陵"等，归一化去掉坐标/等级/括号后缀）作为独立索引列
+//   - 其余（纯数字坐标、无汉字地点）统一归入 category=other 的"其他"列
+// 返回 cities: [{name, category}]（category: "city"=中文名 / "other"=其他），rows.Cities 以索引名作 key
 func (a *App) GetSiegeSummary() string {
+	if model.Conn == nil {
+		return global.Response{Message: "尚未连接数据库，请先选择数据库"}.Error()
+	}
 	cityExpr := "COALESCE(NULLIF(wid_name, ''), CAST(wid AS TEXT))"
+	hanRe := regexp.MustCompile(`\p{Han}`)
 
-	// 城池名单：三国城池大全 + 已创建攻城任务的任务名(清洗后)
-	knownCities := map[string]bool{}
-	for _, c := range threeKingdomsCityList {
-		knownCities[c] = true
-	}
-	var tasks []model.Task
-	model.Conn.Find(&tasks)
-	for _, t := range tasks {
-		if tn := extractCityFromTaskName(t.Name); tn != "" {
-			knownCities[tn] = true
+	// 地点索引集合：name -> category
+	locSet := map[string]string{}
+	// 地点索引名：含汉字的归一化（去坐标/等级/括号后缀），其余（数字坐标等）统一归"其他"
+	locName := func(raw string) string {
+		if !hanRe.MatchString(raw) {
+			return "其他"
 		}
+		n := extractCityName(raw)
+		if n == "" || n == "未知地点" {
+			return "其他"
+		}
+		return n
 	}
-	isCity := func(name string) bool { return name != "" && knownCities[name] }
+	addLoc := func(raw string) {
+		name := locName(raw)
+		if name == "其他" {
+			locSet["其他"] = "other"
+			return
+		}
+		locSet[name] = "city"
+	}
 
-	// 城池列表（两表合并，只保留命中城池名单的地点）
-	var cities []string
-	// 城池名归一化（"营陵Lv.6"/"土地（Lv.5）"/"123,456" → 纯城池名），作为汇总第一分组键
-	normCity := func(name string) string { return extractCityName(name) }
-
-	citySet := map[string]bool{}
 	var brCities []string
 	model.Conn.Model(&model.BattleReport{}).
 		Where("attack_name != '' AND wid_name != '' AND attack_name IN (SELECT name FROM team_user WHERE name != '')").
 		Distinct("wid_name").Order("wid_name ASC").Pluck("wid_name", &brCities)
 	for _, c := range brCities {
-		if n := normCity(c); isCity(n) {
-			citySet[n] = true
-		}
+		addLoc(c)
 	}
 	var rCities []string
 	model.Conn.Model(&model.Report{}).
 		Where("attack_name != '' AND " + cityExpr + " != '' AND attack_name IN (SELECT name FROM team_user WHERE name != '')").
 		Distinct(cityExpr).Order(cityExpr + " ASC").Pluck(cityExpr, &rCities)
 	for _, c := range rCities {
-		if n := normCity(c); isCity(n) {
-			citySet[n] = true
+		addLoc(c)
+	}
+
+	var cities []map[string]string
+	for name, category := range locSet {
+		cities = append(cities, map[string]string{"name": name, "category": category})
+	}
+	// 排序：中文地名按字典序，"其他"固定排最后
+	sort.Slice(cities, func(i, j int) bool {
+		if cities[i]["name"] == "其他" {
+			return false
 		}
-	}
-	for c := range citySet {
-		cities = append(cities, c)
-	}
-	sort.Strings(cities)
+		if cities[j]["name"] == "其他" {
+			return true
+		}
+		return cities[i]["name"] < cities[j]["name"]
+	})
 
 	// 角色ID/分组 映射（以 team_user 为准）
 	groupMap := map[string]string{}
@@ -1545,10 +1561,10 @@ func (a *App) GetSiegeSummary() string {
 			rowMap[key] = row
 			rows = append(rows, row)
 		}
-		stat := row.Cities[normCity(agg.CityName)]
+		stat := row.Cities[locName(agg.CityName)]
 		if stat == nil {
 			stat = &CityStat{}
-			row.Cities[normCity(agg.CityName)] = stat
+			row.Cities[locName(agg.CityName)] = stat
 		}
 		stat.Present = true
 		stat.Kill += int(agg.KillCnt)
