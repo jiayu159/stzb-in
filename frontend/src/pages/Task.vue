@@ -185,7 +185,7 @@ const normalizeHeader = (s) => String(s ?? '').trim().toLowerCase()
 // 表头角色识别规则（顺序即优先级）；contains 用子串匹配，exact 用全等匹配（已归一化）
 const HEADER_RULES = [
     { role: 'roleId', contains: ['角色id', '角色编号', '角色', 'roleid', 'role_id', 'role'], exact: ['id', 'uid'] },
-    { role: 'name', contains: ['名字', '姓名', '昵称', '名称'], exact: ['name'] },
+    { role: 'name', contains: ['名字', '姓名', '昵称', '名称'], exact: ['name', '进攻方', '攻击方', '攻方', '交战方', '进攻', '攻打方', 'attacker', 'attack'] },
     { role: 'group', contains: ['分组', '联盟', '同盟', '组别'], exact: ['group'] },
     { role: 'reports', contains: ['战报', '次数', '数量'], exact: ['reports', 'count', 'times'] },
     { role: 'kill', contains: ['灭敌', '杀敌', '击杀', '消灭'], exact: ['kill'] },
@@ -216,12 +216,24 @@ const sortCitiesCn = (cities) => {
 }
 
 const parseSiegeImport = (sheetRows) => {
-    // 定位第一个非空行作为表头
-    let hi = 0
-    while (hi < sheetRows.length && !(Array.isArray(sheetRows[hi]) && sheetRows[hi].some(c => cellText(c) !== ''))) hi++
-    if (hi >= sheetRows.length) throw new Error('表格为空，未找到表头行')
-    const header = (sheetRows[hi] || []).map(cellText)
     const MATRIX_RE = /^(.*?)[-－–—](出勤|灭敌|杀敌|拆迁|耐久|战报数?|次数)$/
+    const isMatrixHeader = (h) => { const m = h.match(MATRIX_RE); return !!(m && SUB_ALIAS[m[2]]) }
+    // 定位表头行：跳过标题/空行，取第一个含关键列（成员/地点/矩阵列）的非空行
+    let hi = -1
+    for (let i = 0; i < sheetRows.length && hi < 0; i++) {
+        const r = sheetRows[i]
+        if (!Array.isArray(r) || !r.some(c => cellText(c) !== '')) continue
+        const critical = (r || []).some(c => {
+            const h = normalizeHeader(cellText(c))
+            if (!h) return false
+            if (isMatrixHeader(h)) return true
+            const role = detectHeaderRole(h)
+            return role === 'roleId' || role === 'name' || role === 'location'
+        })
+        if (critical) hi = i
+    }
+    if (hi < 0) throw new Error('未找到表头行；表格需包含「成员（角色ID/名字/进攻方）+ 地点」列，或「地点-出勤/灭敌/拆迁/战报」矩阵表头')
+    const header = (sheetRows[hi] || []).map(cellText)
     const roleByCol = {}
     const matrixCols = []
     for (let c = 0; c < header.length; c++) {
@@ -372,7 +384,7 @@ onMounted(() => {
                         统计当前同盟成员的攻城战报：每个成员在每座城的
                         <b>出勤</b>（是否攻击该城）、<b>灭敌数</b>（防守方兵力变化：战前−战后）、<b>拆迁值</b>（耐久下降累加）、<b>战报数</b>。
                         <br/>地点索引自动分类：<b>中文汉字名称</b>（内黄/营陵等）作为独立列，其余（<b>数字坐标</b>之类）统一归入「其他」列；索引列标有「(其他)」后缀。
-                        <br/>自动识别不理想时，可点「<b>导入表格</b>」手动导入 Excel/CSV 解析：支持「成员+地点+灭敌/拆迁/战报」明细表，或导出的「地点-出勤/灭敌/拆迁/战报」矩阵表。
+                        <br/>自动识别不理想时，可点「<b>导入表格</b>」手动导入 Excel/CSV 解析：支持「成员+地点+灭敌/拆迁/战报」明细表、导出的「地点-出勤/灭敌/拆迁/战报」矩阵表，以及游戏「同盟战报」导出（进攻方/地点/结果，按成员+地点统计到场与战报数）。
                     </p>
                     <div v-if="dataSource === 'import'" class="import-banner">
                         <span>
