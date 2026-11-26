@@ -73,8 +73,8 @@ const clearCapture = () => {
     capturedRequests.value = []
 }
 
-// 获取详细战报开关（由控制面板迁移至此）
-const battleReportEnabled = ref(false)
+// 获取详细战报开关（由控制面板迁移至此），默认开启：启动即入库 cmd=92 战报
+const battleReportEnabled = ref(true)
 
 const onEnableGetBattleReport = () => {
     EnableGetBattleReport().then(v => {
@@ -414,7 +414,7 @@ onMounted(() => {
                     </div>
                 </template>
                 <div style="font-size:13px;margin-bottom:10px;">
-                    用于查询队伍功能拉取战报使用，开启时无法获取攻城战报
+                    用于查询队伍、攻城汇总统计战报使用，默认开启；关闭后抓到的战报仍会入库（开关仅作显示，不再影响入库）
                 </div>
                 <div style="display:flex;align-items:center;gap:12px;">
                     <n-button :type="battleReportEnabled ? 'primary' : 'default'" @click="onEnableGetBattleReport">开启</n-button>
